@@ -1,0 +1,91 @@
+name: Castlevania - primeira prova de portabilidade PS4
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/castlevania-compat-ps4.yml'
+      - 'docs/MARCO_3_CASTLEVANIA.md'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/castlevania-compat-ps4.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  investigar-castlevania:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Preparar ferramentas livres de compilacao
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang lld binutils cmake ninja-build git curl ca-certificates libvulkan-dev
+
+      - name: Obter codigo aberto de Castlevania em revisao fixa
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet https://github.com/SwonDev/cstlvnia-blmont-to-macos.git "${RUNNER_TEMP}/castlevania-src"
+          git -C "${RUNNER_TEMP}/castlevania-src" checkout --quiet 4043f21bb4f656d34cd17ba070238c7728d00631
+          test -f "${RUNNER_TEMP}/castlevania-src/games/castlevania/game.cpp"
+          test -f "${RUNNER_TEMP}/castlevania-src/runtime/include/nx/game.h"
+          git -C "${RUNNER_TEMP}/castlevania-src" rev-parse HEAD
+
+      - name: Validar contratos da camada de jogo sem arquivos comerciais
+        shell: bash
+        run: |
+          set -euo pipefail
+          upstream="${RUNNER_TEMP}/castlevania-src"
+          cmake -S "$upstream" -B "${RUNNER_TEMP}/castlevania-tests" -G Ninja \
+            -DNX_TESTS=ON -DNX_BUILD_GAME=OFF
+          cmake --build "${RUNNER_TEMP}/castlevania-tests" --parallel 2 \
+            --target gpu_pick_test program_bindings_test quads_test touch_desktop_test
+          ctest --test-dir "${RUNNER_TEMP}/castlevania-tests" \
+            -R '^(gpu_pick|program_bindings|quads|touch_desktop)$' --output-on-failure
+
+      - name: Obter SDK de compilacao do PS4 e verificar integridade
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/sdk-bundle" "${RUNNER_TEMP}/sdk"
+          curl --fail --location --retry 3 --retry-delay 3 \
+            'https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz' \
+            -o "${RUNNER_TEMP}/sdk-bundle/openorbis.tar.gz"
+          echo '3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526  '"${RUNNER_TEMP}/sdk-bundle/openorbis.tar.gz" | sha256sum --check
+          tar -xzf "${RUNNER_TEMP}/sdk-bundle/openorbis.tar.gz" -C "${RUNNER_TEMP}/sdk"
+          sdk_link="$(find "${RUNNER_TEMP}/sdk" -name link.x -type f -print -quit)"
+          test -n "$sdk_link"
+          sdk="$(dirname "$sdk_link")"
+          test -f "$sdk/lib/crt1.o"
+          echo "OO_PS4_TOOLCHAIN=$sdk" >> "$GITHUB_ENV"
+
+      - name: Compilar perfil C++ REAL de Castlevania para CPU x86-64 do PS4
+        shell: bash
+        run: |
+          set -euo pipefail
+          upstream="${RUNNER_TEMP}/castlevania-src"
+          sdk="$OO_PS4_TOOLCHAIN"
+          mkdir -p castlevania-obj
+          clang++ --target=x86_64-pc-freebsd12-elf \
+            -std=c++20 -fPIC -fno-exceptions -c \
+            -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
+            -I "$upstream/runtime/include" \
+            "$upstream/games/castlevania/game.cpp" \
+            -o castlevania-obj/game.o
+          test -s castlevania-obj/game.o
+          file castlevania-obj/game.o
+          readelf -h castlevania-obj/game.o | grep -E 'Class:|Machine:'
+          echo 'Perfil compilado: nao contem o codigo reexecutavel do jogo ou graficos.'
+
+      - name: Publicar somente objeto livre de perfil e relatorio
+        uses: actions/upload-artifact@v4
+        with:
+          name: castlevania-perfil-ps4-sem-jogo
+          path: castlevania-obj/game.o
+          if-no-files-found: error
+          retention-days: 7
