@@ -1,0 +1,52 @@
+name: Castlevania PS4 - auditoria NVN/Vulkan (sem jogo)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/castlevania-graficos-v12.yml'
+      - 'tools/auditar_ponte_grafica.py'
+      - 'tests/test_auditar_ponte_grafica.py'
+      - 'docs/MARCO_8_GRAFICOS.md'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/castlevania-graficos-v12.yml'
+      - 'tools/auditar_ponte_grafica.py'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  comparar-backends:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Baixar codigo proprio
+        uses: actions/checkout@v4
+      - name: Testar o auditor com dados ficticios (sem jogo)
+        run: python3 -m unittest discover -s tests -p 'test_auditar_ponte_grafica.py' -v
+      - name: Baixar apenas projetos publicos de referencia em revisoes fixas
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone -q https://github.com/SwonDev/cstlvnia-blmont-to-macos.git "$RUNNER_TEMP/castlevania-runtime"
+          git -C "$RUNNER_TEMP/castlevania-runtime" checkout -q 4043f21bb4f656d34cd17ba070238c7728d00631
+          git clone -q https://github.com/iHaiDeeZ/SMW.git "$RUNNER_TEMP/smw-ps4"
+          git -C "$RUNNER_TEMP/smw-ps4" checkout -q 2e8c2adfac0675a960192336ca26249019eca489
+      - name: Auditar contratos Vulkan e VideoOut (sem compilar jogo)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/auditar_ponte_grafica.py \
+            --castlevania "$RUNNER_TEMP/castlevania-runtime" \
+            --smw "$RUNNER_TEMP/smw-ps4" \
+            --out-dir grafico-report
+      - name: Publicar relatorio tecnico (SEM PKG)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: castlevania-ps4-v12-auditoria-grafica
+          path: grafico-report/*
+          if-no-files-found: warn
+          retention-days: 14
