@@ -1,0 +1,94 @@
+name: Castlevania - viabilidade de memoria PS4 (sem jogo)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/castlevania-memory-ps4.yml'
+      - 'src/ps4/memory_probe.*'
+      - 'ps4_memory_probe/**'
+      - 'tests/test_memory_probe.cpp'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/castlevania-memory-ps4.yml'
+      - 'src/ps4/memory_probe.*'
+      - 'ps4_memory_probe/**'
+      - 'tests/test_memory_probe.cpp'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  memoria:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Baixar fontes do projeto
+        uses: actions/checkout@v4
+
+      - name: Instalar compiladores e utilitarios
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang lld binutils curl ca-certificates
+
+      - name: Testar API isolada de memoria no Linux (somente host)
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++17 -O2 -Wall -Wextra -Werror \
+            src/ps4/memory_probe.cpp tests/test_memory_probe.cpp \
+            -o /tmp/cvps4-memtest
+          /tmp/cvps4-memtest
+
+      - name: Obter OpenOrbis 0.5.4 e conferir hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/bundle" "${RUNNER_TEMP}/sdk"
+          curl --fail --location --retry 3 --retry-delay 3 \
+            'https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz' \
+            -o "${RUNNER_TEMP}/bundle/openorbis.tar.gz"
+          echo '3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526  '"${RUNNER_TEMP}/bundle/openorbis.tar.gz" | sha256sum --check
+          tar -xzf "${RUNNER_TEMP}/bundle/openorbis.tar.gz" -C "${RUNNER_TEMP}/sdk"
+          sdk_link="$(find "${RUNNER_TEMP}/sdk" -name link.x -type f -print -quit)"
+          test -n "$sdk_link"
+          sdk="$(dirname "$sdk_link")"
+          test -f "$sdk/lib/crt1.o"
+          echo "OO_PS4_TOOLCHAIN=$sdk" >> "$GITHUB_ENV"
+
+      - name: Compilar probe de memoria para PS4 e gerar eboot de laboratorio
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$OO_PS4_TOOLCHAIN"
+          mkdir -p ps4_memory_probe/build
+          flags=(--target=x86_64-pc-freebsd12-elf -D_POSIX_C_SOURCE=200809L
+                 -std=c++17 -fPIC -funwind-tables -fno-exceptions -c
+                 -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1"
+                 -I src/ps4)
+          clang++ "${flags[@]}" src/ps4/memory_probe.cpp -o ps4_memory_probe/build/memory_probe.o
+          clang++ "${flags[@]}" ps4_memory_probe/main.cpp -o ps4_memory_probe/build/main.o
+          ld.lld -m elf_x86_64 -pie --script "$sdk/link.x" --eh-frame-hdr \
+            -L"$sdk/lib" \
+            ps4_memory_probe/build/{main,memory_probe}.o \
+            -o ps4_memory_probe/build/probe.elf \
+            -lc -lkernel -lc++ "$sdk/lib/crt1.o"
+          "$sdk/bin/linux/create-fself" \
+            -in=ps4_memory_probe/build/probe.elf \
+            -out=ps4_memory_probe/build/probe.oelf \
+            --eboot ps4_memory_probe/build/eboot.bin \
+            --paid 0x3800000000000011
+          test -s ps4_memory_probe/build/eboot.bin
+          file ps4_memory_probe/build/probe.elf
+          ls -lh ps4_memory_probe/build/{probe.elf,eboot.bin}
+
+      - name: Arquivar diagnostico (NAO e PKG instalavel)
+        uses: actions/upload-artifact@v4
+        with:
+          name: castlevania-ps4-memoria-eboot-laboratorio
+          path: |
+            ps4_memory_probe/build/probe.elf
+            ps4_memory_probe/build/eboot.bin
+          if-no-files-found: error
+          retention-days: 7
