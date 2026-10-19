@@ -76,7 +76,7 @@ jobs:
           sdk="$OO_PS4_TOOLCHAIN"
           upstream="${RUNNER_TEMP}/castlevania-src"
           mkdir -p ps4_runtime_probe/build
-          flags=(--target=x86_64-pc-freebsd12-elf -std=c++17 -fPIC -funwind-tables -fno-exceptions -c
+          flags=(--target=x86_64-pc-freebsd12-elf -D_POSIX_C_SOURCE=200809L -std=c++17 -fPIC -funwind-tables -fno-exceptions -c
                  -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1"
                  -I "$upstream/runtime/include" -I "$upstream/runtime/src" -I src/ps4)
           clang++ "${flags[@]}" src/ps4/pad_translate.cpp -o ps4_runtime_probe/build/pad_translate.o
