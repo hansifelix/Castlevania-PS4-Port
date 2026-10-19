@@ -1,0 +1,84 @@
+name: PS4 - primeiro eboot experimental
+
+on:
+  pull_request:
+    paths:
+      - 'ps4_hello/**'
+      - '.github/workflows/ps4-eboot.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'ps4_hello/**'
+      - '.github/workflows/ps4-eboot.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ps4-eboot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout do projeto
+        uses: actions/checkout@v4
+
+      - name: Instalar compilador e ferramentas
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang lld binutils
+
+      - name: Baixar e conferir SDK OpenOrbis 0.5.4
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/sdk-bundle" "${RUNNER_TEMP}/sdk"
+          curl --fail --location --retry 3 --retry-delay 3 \
+            'https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz' \
+            -o "${RUNNER_TEMP}/sdk-bundle/openorbis.tar.gz"
+          echo '3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526  '"${RUNNER_TEMP}/sdk-bundle/openorbis.tar.gz" | sha256sum --check
+          tar -xzf "${RUNNER_TEMP}/sdk-bundle/openorbis.tar.gz" -C "${RUNNER_TEMP}/sdk"
+          sdk_link="$(find "${RUNNER_TEMP}/sdk" -name link.x -type f -print -quit)"
+          if [[ -z "$sdk_link" ]]; then
+            echo 'SDK nao contem link.x; confira o formato do pacote OpenOrbis.' >&2
+            exit 1
+          fi
+          sdk="$(dirname "$sdk_link")"
+          test -f "$sdk/lib/crt1.o"
+          test -f "$sdk/bin/linux/create-fself"
+          echo "OO_PS4_TOOLCHAIN=$sdk" >> "$GITHUB_ENV"
+          echo "SDK localizado em: $sdk"
+
+      - name: Compilar executavel de teste para PS4
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$OO_PS4_TOOLCHAIN"
+          mkdir -p ps4_hello/build
+          clang++ --target=x86_64-pc-freebsd12-elf \
+            -fPIC -funwind-tables -fno-exceptions -c \
+            -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
+            ps4_hello/main.cpp -o ps4_hello/build/main.o
+          ld.lld -m elf_x86_64 -pie --script "$sdk/link.x" --eh-frame-hdr \
+            -L"$sdk/lib" \
+            ps4_hello/build/main.o \
+            -o ps4_hello/build/hello.elf \
+            -lc -lkernel -lc++ "$sdk/lib/crt1.o"
+          "$sdk/bin/linux/create-fself" \
+            -in=ps4_hello/build/hello.elf \
+            -out=ps4_hello/build/hello.oelf \
+            --eboot ps4_hello/build/eboot.bin \
+            --paid 0x3800000000000011
+          test -s ps4_hello/build/eboot.bin
+          ls -lh ps4_hello/build/{hello.elf,hello.oelf,eboot.bin}
+          file ps4_hello/build/hello.elf
+
+      - name: Disponibilizar executavel do teste
+        uses: actions/upload-artifact@v4
+        with:
+          name: ps4-eboot-teste-sem-jogo
+          path: |
+            ps4_hello/build/eboot.bin
+            ps4_hello/build/hello.elf
+          if-no-files-found: error
+          retention-days: 7
