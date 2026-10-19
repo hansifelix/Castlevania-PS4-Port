@@ -1,0 +1,26 @@
+# Saidas da compilacao, cache
+build/
+__pycache__/
+*.pyc
+*.o
+*.a
+
+# Proteger arquivos do jogo e segredos: NAO envie ao GitHub
+*.nsp
+*.xci
+*.nca
+*.ns0
+*.apk
+*.pkg
+*.keys
+*.key
+*.tik
+*.cert
+*.p12
+*.pfx
+prod.keys
+title.keys
+private/
+data/
+sce_sys/
+*.log
