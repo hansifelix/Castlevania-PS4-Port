@@ -1,0 +1,28 @@
+name: Testes do laboratorio (sem ROMs)
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  testes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout dos arquivos publicos
+        uses: actions/checkout@v4
+      - name: Preparar ambiente
+        run: |
+          python3 --version
+          cmake --version
+          c++ --version
+      - name: Configurar testes C++
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Compilar adaptador de controle
+        run: cmake --build build --parallel 2
+      - name: Executar testes C++ e Python (dados ficticios)
+        run: ctest --test-dir build --output-on-failure
