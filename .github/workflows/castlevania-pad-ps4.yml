@@ -1,0 +1,108 @@
+name: Castlevania - ponte DS4/Npad PS4 (sem jogo)
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/castlevania-pad-ps4.yml'
+      - 'src/ps4/**'
+      - 'tests/test_pad_translate.cpp'
+      - 'ps4_runtime_probe/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/castlevania-pad-ps4.yml'
+      - 'src/ps4/**'
+      - 'ps4_runtime_probe/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ponte-controles:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout do projeto
+        uses: actions/checkout@v4
+
+      - name: Dependencias
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang lld binutils curl ca-certificates git
+
+      - name: Obter runtime publico em revisao fixa
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone -q https://github.com/SwonDev/cstlvnia-blmont-to-macos.git "${RUNNER_TEMP}/castlevania-src"
+          git -C "${RUNNER_TEMP}/castlevania-src" checkout -q 4043f21bb4f656d34cd17ba070238c7728d00631
+          test -f "${RUNNER_TEMP}/castlevania-src/runtime/src/platform.h"
+          test -f "${RUNNER_TEMP}/castlevania-src/games/castlevania/game.cpp"
+          test -f "${RUNNER_TEMP}/castlevania-src/runtime/include/nx/game.h"
+
+      - name: Rodar testes do mapeamento de controles no Linux
+        shell: bash
+        run: |
+          set -euo pipefail
+          g++ -std=c++17 -Wall -Wextra -Werror \
+            -I "${RUNNER_TEMP}/castlevania-src/runtime/src" \
+            -I src/ps4 \
+            src/ps4/pad_translate.cpp tests/test_pad_translate.cpp \
+            -o "${RUNNER_TEMP}/test-pad"
+          "${RUNNER_TEMP}/test-pad"
+
+      - name: Obter OpenOrbis verificando SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "${RUNNER_TEMP}/bundle" "${RUNNER_TEMP}/sdk"
+          curl --fail --location --retry 3 --retry-delay 3 \
+            'https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz' \
+            -o "${RUNNER_TEMP}/bundle/openorbis.tar.gz"
+          echo '3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526  '"${RUNNER_TEMP}/bundle/openorbis.tar.gz" | sha256sum --check
+          tar -xzf "${RUNNER_TEMP}/bundle/openorbis.tar.gz" -C "${RUNNER_TEMP}/sdk"
+          sdk_link="$(find "${RUNNER_TEMP}/sdk" -name link.x -type f -print -quit)"
+          test -n "$sdk_link"
+          sdk="$(dirname "$sdk_link")"
+          test -f "$sdk/lib/crt1.o"
+          test -f "$sdk/include/orbis/Pad.h"
+          echo "OO_PS4_TOOLCHAIN=$sdk" >> "$GITHUB_ENV"
+
+      - name: Compilar entrada PS4 + perfil REAL de Castlevania + eboot de diagnostico
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$OO_PS4_TOOLCHAIN"
+          upstream="${RUNNER_TEMP}/castlevania-src"
+          mkdir -p ps4_runtime_probe/build
+          flags=(--target=x86_64-pc-freebsd12-elf -D_POSIX_C_SOURCE=200809L -std=c++17 -fPIC -funwind-tables -fno-exceptions -c
+                 -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1"
+                 -I "$upstream/runtime/include" -I "$upstream/runtime/src" -I src/ps4)
+          clang++ "${flags[@]}" src/ps4/pad_translate.cpp -o ps4_runtime_probe/build/pad_translate.o
+          clang++ "${flags[@]}" src/ps4/pad_native.cpp -o ps4_runtime_probe/build/pad_native.o
+          clang++ "${flags[@]}" "$upstream/games/castlevania/game.cpp" -o ps4_runtime_probe/build/game.o
+          clang++ "${flags[@]}" ps4_runtime_probe/main.cpp -o ps4_runtime_probe/build/main.o
+          ld.lld -m elf_x86_64 -pie --script "$sdk/link.x" --eh-frame-hdr \
+            -L"$sdk/lib" \
+            ps4_runtime_probe/build/{main,game,pad_translate,pad_native}.o \
+            -o ps4_runtime_probe/build/bridge.elf \
+            -lc -lkernel -lc++ -lScePad -lSceUserService "$sdk/lib/crt1.o"
+          "$sdk/bin/linux/create-fself" \
+            -in=ps4_runtime_probe/build/bridge.elf \
+            -out=ps4_runtime_probe/build/bridge.oelf \
+            --eboot ps4_runtime_probe/build/eboot.bin \
+            --paid 0x3800000000000011
+          test -s ps4_runtime_probe/build/eboot.bin
+          file ps4_runtime_probe/build/bridge.elf
+          ls -lh ps4_runtime_probe/build/{bridge.elf,eboot.bin}
+
+      - name: Disponibilizar ponte experimental (nao e Castlevania jogavel)
+        uses: actions/upload-artifact@v4
+        with:
+          name: castlevania-controle-eboot-test
+          path: |
+            ps4_runtime_probe/build/bridge.elf
+            ps4_runtime_probe/build/eboot.bin
+          if-no-files-found: error
+          retention-days: 7
