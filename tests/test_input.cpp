@@ -1,4 +1,7 @@
 #include "input_adapter.hpp"
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <cassert>
 #include <iostream>
 using namespace castlevania_ps4;
