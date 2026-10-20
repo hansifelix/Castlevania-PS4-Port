@@ -15,6 +15,13 @@ add_executable(test_npad_bridge tests/test_npad_bridge.cpp)
 target_link_libraries(test_npad_bridge PRIVATE npad_bridge)
 add_test(NAME test_npad_bridge COMMAND test_npad_bridge)
 
+# Kazuma runtime etapa 2: range checks only, no PS4 API and no game files.
+add_library(guest_memory_plan STATIC src/runtime_bridge/guest_memory_plan.cpp)
+target_include_directories(guest_memory_plan PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+add_executable(test_guest_memory_plan tests/test_guest_memory_plan.cpp)
+target_link_libraries(test_guest_memory_plan PRIVATE guest_memory_plan)
+add_test(NAME test_guest_memory_plan COMMAND test_guest_memory_plan)
+
 add_test(NAME test_input COMMAND test_input)
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
