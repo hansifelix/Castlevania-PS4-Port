@@ -1,5 +1,8 @@
 #include "runtime_bridge/npad_bridge.hpp"
 #include "input_adapter.hpp"
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <cassert>
 #include <cstdint>
 using namespace castlevania_ps4;
