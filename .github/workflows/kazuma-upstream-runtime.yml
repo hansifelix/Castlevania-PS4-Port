@@ -14,24 +14,45 @@ jobs:
   runtime-original:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
     steps:
       - name: Obter apenas arquivos publicos do Kazuma Port Games
         uses: actions/checkout@v4
 
       - name: Instalar ferramentas nativas no Linux
         run: |
+          set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends cmake ninja-build g++ libvulkan-dev
 
       - name: Obter codigo PUBLICO original do runtime (revisao fixa)
         run: |
+          set -euo pipefail
           git clone --filter=blob:none https://github.com/SwonDev/cstlvnia-blmont-to-macos.git upstream
           git -C upstream checkout --detach 4043f21bb4f656d34cd17ba070238c7728d00631
           git -C upstream rev-parse HEAD | tee upstream_sha.txt
           test "$(cat upstream_sha.txt)" = '4043f21bb4f656d34cd17ba070238c7728d00631'
 
+      - name: Corrigir somente fixture audio do upstream na copia do CI
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          file = Path('upstream/tests/audio_out_test.cpp')
+          source = file.read_text(encoding='utf-8')
+          original = 'std::string writable_root() { return "/tmp"; }'
+          replacement = 'std::string data_root() { return "/tmp"; }'
+          if source.count(original) != 1:
+              raise SystemExit('FIXTURE MUDOU: revisao manual necessaria (nenhum patch aplicado)')
+          file.write_text(source.replace(original, replacement), encoding='utf-8')
+          print('Fixture corrigida apenas na copia efemera do runner: writable_root -> data_root')
+          PY
+
       - name: Configurar testes REAIS do runtime (sem qualquer codigo do jogo)
         run: |
+          set -euo pipefail
           mkdir -p relatorios
           cmake -S upstream -B upstream-build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release -DNX_BUILD_GAME=OFF -DNX_TESTS=ON \
@@ -39,6 +60,7 @@ jobs:
 
       - name: Compilar quatro componentes originais do runtime
         run: |
+          set -euo pipefail
           mkdir -p relatorios
           cmake --build upstream-build --parallel 2 --target \
             time_service_test thread_control_test audio_out_test weak_import_test \
@@ -46,10 +68,12 @@ jobs:
 
       - name: Executar testes originais (sem assets, ROM ou NSO)
         run: |
+          set -euo pipefail
           mkdir -p relatorios
-          ctest --test-dir upstream-build --output-on-failure \
+          ctest --test-dir upstream-build --output-on-failure --no-tests=error \
             -R '^(time_service|thread_control|audio_out|weak_import)$' \
             2>&1 | tee relatorios/testes.txt
+          grep -Eq '100% tests passed, 0 tests failed out of 4' relatorios/testes.txt
 
       - name: Publicar relatorios mesmo que algum teste falhe
         if: always()
