@@ -1,0 +1,72 @@
+name: "Kazuma - Etapa 5: runtime REAL compilado para PS4 (SEM JOGO)"
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/kazuma-etapa5-runtime-ps4.yml'
+      - 'tools/etapa5/**'
+      - 'docs/KAZUMA_ETAPA5_RUNTIME_PS4.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prova-ps4:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Obter somente o repositorio publico Kazuma
+        uses: actions/checkout@v4
+
+      - name: Instalar ferramentas do compilador no Linux
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang lld binutils curl ca-certificates git
+
+      - name: Obter runtime publico original em revisao FIXA
+        run: |
+          set -euo pipefail
+          git clone --quiet --filter=blob:none https://github.com/SwonDev/cstlvnia-blmont-to-macos.git "$RUNNER_TEMP/upstream"
+          git -C "$RUNNER_TEMP/upstream" checkout -q --detach 4043f21bb4f656d34cd17ba070238c7728d00631
+          test "$(git -C "$RUNNER_TEMP/upstream" rev-parse HEAD)" = 4043f21bb4f656d34cd17ba070238c7728d00631
+          echo "KAZUMA_UPSTREAM=$RUNNER_TEMP/upstream" >> "$GITHUB_ENV"
+          mkdir -p relatorios/etapa5
+          git -C "$RUNNER_TEMP/upstream" rev-parse HEAD > relatorios/etapa5/upstream_sha.txt
+
+      - name: Obter OpenOrbis SDK e validar SHA256
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sdk-bundle" "$RUNNER_TEMP/sdk"
+          curl --fail --location --retry 3 --retry-delay 3 \
+            'https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz' \
+            -o "$RUNNER_TEMP/sdk-bundle/openorbis.tar.gz"
+          echo '3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526  '"$RUNNER_TEMP/sdk-bundle/openorbis.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/sdk-bundle/openorbis.tar.gz" -C "$RUNNER_TEMP/sdk"
+          sdk_link="$(find "$RUNNER_TEMP/sdk" -type f -name link.x -print -quit)"
+          test -n "$sdk_link"
+          sdk="$(dirname "$sdk_link")"
+          test -d "$sdk/include/c++/v1"
+          test -f "$sdk/lib/crt1.o"
+          echo "OO_PS4_TOOLCHAIN=$sdk" >> "$GITHUB_ENV"
+          printf '%s\n' 'OpenOrbis v0.5.4; pacote SHA256 3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526' > relatorios/etapa5/sdk.txt
+
+      - name: COMPILAR quatro fontes publicos REAIS para alvo x86-64 PS4
+        run: |
+          set -euo pipefail
+          bash tools/etapa5/compilar_runtime_ps4.sh "$OO_PS4_TOOLCHAIN" "$KAZUMA_UPSTREAM" \
+            2>&1 | tee relatorios/etapa5/execucao.txt
+
+      - name: Publicar TODOS os relatorios mesmo se houver falha
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kazuma-etapa5-compilacao-real-ps4-sem-jogo
+          path: |
+            relatorios/etapa5/
+          if-no-files-found: warn
+          retention-days: 21
