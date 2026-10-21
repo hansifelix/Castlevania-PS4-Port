@@ -1,0 +1,68 @@
+name: "Kazuma - Etapa 11: OELF e fSELF offline (SEM JOGO)"
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/kazuma-etapa11-fself-offline.yml'
+      - 'tools/etapa11/**'
+      - 'docs/KAZUMA_ETAPA11_FSELF_OFFLINE.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  oelf-fself:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Obter repositorio Kazuma
+        uses: actions/checkout@v4
+      - name: Instalar ferramentas de compilacao e auditoria
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang lld binutils curl ca-certificates git python3
+      - name: Configurar Go para compilar conversor publico
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+      - name: Obter OpenOrbis v0.5.4 e validar SHA256
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sdk-bundle" "$RUNNER_TEMP/sdk"
+          curl --fail --location --retry 3 --retry-delay 3 \
+            'https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz' \
+            -o "$RUNNER_TEMP/sdk-bundle/openorbis.tar.gz"
+          echo '3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526  '"$RUNNER_TEMP/sdk-bundle/openorbis.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/sdk-bundle/openorbis.tar.gz" -C "$RUNNER_TEMP/sdk"
+          sdk_link="$(find "$RUNNER_TEMP/sdk" -type f -name link.x -print -quit)"
+          test -n "$sdk_link"
+          sdk="$(dirname "$sdk_link")"
+          test -s "$sdk/lib/crt1.o"
+          echo "OO_PS4_TOOLCHAIN=$sdk" >> "$GITHUB_ENV"
+      - name: Obter fonte do conversor OpenOrbis em revisao fixa
+        run: |
+          set -euo pipefail
+          git clone --quiet --filter=blob:none https://github.com/OpenOrbis/create-fself.git "$RUNNER_TEMP/create-fself"
+          git -C "$RUNNER_TEMP/create-fself" checkout --quiet --detach f2da6229684ce320f673c06fceac9c218f621788
+          test "$(git -C "$RUNNER_TEMP/create-fself" rev-parse HEAD)" = f2da6229684ce320f673c06fceac9c218f621788
+          echo "KAZUMA_CREATE_FSELF=$RUNNER_TEMP/create-fself" >> "$GITHUB_ENV"
+      - name: Gerar e auditar OELF e fSELF temporarios (sem jogo)
+        run: |
+          set -euo pipefail
+          bash tools/etapa11/testar_fself_offline.sh "$OO_PS4_TOOLCHAIN" "$KAZUMA_CREATE_FSELF" 2>&1 | tee etapa11_execucao.txt
+          test -s relatorios/etapa11/resumo.json
+      - name: Publicar somente diagnósticos (sem executaveis)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kazuma-etapa11-relatorio-fself-SEM-JOGO
+          path: |
+            etapa11_execucao.txt
+            relatorios/etapa11/
+          if-no-files-found: warn
+          retention-days: 21
