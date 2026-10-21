@@ -48,7 +48,7 @@ printf '[2/6] Ligando ELF minimo C++ (grafico CPU / SceVideoOut)...\n'
 ld.lld -m elf_x86_64 -pie --script "$sdk/link.x" --eh-frame-hdr \
   -L"$sdk/lib" -o "$scratch/kazuma_12.elf" \
   "$sdk/lib/crt1.o" "$scratch/main.o" "$scratch/graphics.o" \
-  -lc -lkernel -lc++ -lSceVideoOut -lScePad -lSceUserService \
+  -lc -lkernel -lc++ -lSceVideoOut -lScePad -lSceUserService -lSceSystemService -lSceSysmodule \
   >"$out/link.stdout.txt" 2>"$out/link.stderr.txt" || {
   cat "$out/link.stderr.txt" >&2; exit 1;
 }
@@ -122,7 +122,7 @@ done
 TITLE_ID='BREW91235'
 CONTENT_ID='IV0000-BREW91235_00-KAZUMAPADTEST000'
 TITLE='Kazuma Port Games BR - Test 02'
-VERSION='1.00'
+VERSION='1.01'
 pkgroot="$scratch/pkgroot"
 (
   cd "$pkgroot"

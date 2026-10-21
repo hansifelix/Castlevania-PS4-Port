@@ -8,6 +8,8 @@
 #include <orbis/libkernel.h>
 #include <orbis/Pad.h>
 #include <orbis/UserService.h>
+#include <orbis/SystemService.h>
+#include <orbis/Sysmodule.h>
 #include "graphics.h"
 #include "log.h"
 
@@ -105,7 +107,7 @@ static void draw_dynamic(Scene2D &s, bool controller, bool memory_ok,
     center(s,memory_ok ? "MEMORIA 64KB: OK" : "MEMORIA 64KB: FALHA",690,4,
            memory_ok ? green : red);
     center(s,"X TROCA COR / QUADRADO TESTA MEMORIA",825,3,highlight);
-    center(s,"O SAI DO APP / PS FECHA PELO MENU",882,3,white);
+    center(s,"O TENTA SAIR / PS FECHA PELO MENU",882,3,white);
     const Color pulse=(frame/35u)%2 ? green:highlight;
     s.DrawRectangle(850,787,220,14,pulse);
 }
@@ -144,7 +146,24 @@ int main(void) {
             uint32_t pressed=curr & ~prev;
             prev=curr;
             if (pressed) last=key_name(pressed);
-            if (pressed & ORBIS_PAD_BUTTON_CIRCLE) break;
+            if (pressed & ORBIS_PAD_BUTTON_CIRCLE) {
+                // Evitar retornar de main(): no Test 02 antigo isso resultou
+                // em CE-34878-0. Solicitar saida via servico do sistema.
+                std::puts("KAZUMA TEST 02: solicitando retorno ao menu do PS4...");
+                int module_rc = (int)sceSysmoduleLoadModuleInternal(
+                    ORBIS_SYSMODULE_INTERNAL_SYSTEM_SERVICE);
+                std::printf("SystemService load: %d\n", module_rc);
+                if (module_rc == 0) {
+                    int exit_rc = sceSystemServiceLoadExec("exit", nullptr);
+                    std::printf("SystemServiceLoadExec retornou: %d\n", exit_rc);
+                }
+                // Se a requisicao retornar (falhar), NAO finalizar main.
+                // Manter tela visivel para fechar manualmente com o botao PS.
+                last = "USE BOTAO PS PARA FECHAR";
+                connected = false;
+                scePadClose(pad);
+                pad = -1;
+            }
             if (pressed & ORBIS_PAD_BUTTON_CROSS) theme=!theme;
             if (pressed & ORBIS_PAD_BUTTON_SQUARE) memory_ok=memory_test();
         }
@@ -154,7 +173,6 @@ int main(void) {
         scene->FrameWait(int(frame));
         ++frame;
     }
-    if (pad>=0) scePadClose(pad);
-    std::puts("KAZUMA TEST 02: encerramento pelo botao O.");
+    // A saida por Circulo e solicitada ao SystemService.
     return 0;
 }
