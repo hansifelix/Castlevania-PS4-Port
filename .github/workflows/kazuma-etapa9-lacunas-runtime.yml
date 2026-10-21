@@ -1,0 +1,95 @@
+name: "Kazuma - Etapa 9: classificar lacunas do runtime PS4 (SEM JOGO)"
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/kazuma-etapa9-lacunas-runtime.yml'
+      - 'tools/etapa9/**'
+      - 'docs/KAZUMA_ETAPA9_LACUNAS.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  lacunas-runtime:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Obter repositorio publico Kazuma
+        uses: actions/checkout@v4
+      - name: Instalar ferramentas de auditoria
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang lld binutils curl ca-certificates git python3
+      - name: Obter fonte publica original de revisao fixa
+        run: |
+          set -euo pipefail
+          git clone --quiet --filter=blob:none https://github.com/SwonDev/cstlvnia-blmont-to-macos.git "$RUNNER_TEMP/upstream"
+          git -C "$RUNNER_TEMP/upstream" checkout -q --detach 4043f21bb4f656d34cd17ba070238c7728d00631
+          test "$(git -C "$RUNNER_TEMP/upstream" rev-parse HEAD)" = 4043f21bb4f656d34cd17ba070238c7728d00631
+          echo "KAZUMA_UPSTREAM=$RUNNER_TEMP/upstream" >> "$GITHUB_ENV"
+      - name: Obter OpenOrbis v0.5.4 e validar SHA256
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sdk-bundle" "$RUNNER_TEMP/sdk"
+          curl --fail --location --retry 3 --retry-delay 3 \
+            'https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz' \
+            -o "$RUNNER_TEMP/sdk-bundle/openorbis.tar.gz"
+          echo '3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526  '"$RUNNER_TEMP/sdk-bundle/openorbis.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/sdk-bundle/openorbis.tar.gz" -C "$RUNNER_TEMP/sdk"
+          sdk_link="$(find "$RUNNER_TEMP/sdk" -type f -name link.x -print -quit)"
+          test -n "$sdk_link"
+          sdk="$(dirname "$sdk_link")"
+          test -d "$sdk/lib"
+          echo "OO_PS4_TOOLCHAIN=$sdk" >> "$GITHUB_ENV"
+      - name: Reproduzir os quatro objetos base
+        run: |
+          set -euo pipefail
+          bash tools/etapa5/compilar_runtime_ps4.sh "$OO_PS4_TOOLCHAIN" "$KAZUMA_UPSTREAM" 2>&1 | tee etapa5_reproducao.txt
+          test "$(awk -F '\t' '$2=="PASS"{n++} END{print n+0}' relatorios/etapa5/resultados.tsv)" -eq 4
+      - name: Reproduzir os tres provedores
+        run: |
+          set -euo pipefail
+          KAZUMA_ETAPA8_GUARDAR_OBJETOS=1 bash tools/etapa7/auditar_provedores.sh "$OO_PS4_TOOLCHAIN" "$KAZUMA_UPSTREAM" 2>&1 | tee etapa7_reproducao.txt
+          for obj in kernel memoria loader; do test -s "relatorios/etapa7/objetos/$obj.o"; done
+      - name: Reproduzir auditoria de simbolos da etapa 8
+        run: |
+          set -euo pipefail
+          bash tools/etapa8/auditar_simbolos_sdk.sh "$OO_PS4_TOOLCHAIN" 2>&1 | tee etapa8_reproducao.txt
+          test -s relatorios/etapa8/resumo.json
+      - name: Classificar referencias sem correspondencia no SDK
+        run: |
+          set -euo pipefail
+          python3 tools/etapa9/classificar_pendencias.py \
+            --resumo relatorios/etapa8/resumo.json \
+            --upstream "$KAZUMA_UPSTREAM" \
+            --saida relatorios/etapa9 2>&1 | tee etapa9_execucao.txt
+          python3 - <<'PY_VALIDATE'
+          import json
+          with open('relatorios/etapa9/resumo.json', encoding='utf-8') as f:
+              x = json.load(f)
+          assert x['referencias_indefinidas_nos_sete_objetos'] == 110
+          assert x['com_pista_em_arquivos_estaticos_openorbis'] == 84
+          assert x['sem_pista_nos_arquivos_estaticos_openorbis'] == 26
+          assert x['comprovacao_de_link_final'] is False
+          assert x['comprovacao_de_execucao_no_ps4'] is False
+          print('Etapa 9: classificacao consistente com snapshot da etapa 8.')
+          PY_VALIDATE
+      - name: Publicar apenas relatorios de auditoria
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kazuma-etapa9-relatorio-lacunas-SEM-JOGO
+          path: |
+            etapa5_reproducao.txt
+            etapa7_reproducao.txt
+            etapa8_reproducao.txt
+            etapa9_execucao.txt
+            relatorios/etapa9/
+          if-no-files-found: warn
+          retention-days: 21
