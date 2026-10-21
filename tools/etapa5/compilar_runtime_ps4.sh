@@ -12,10 +12,35 @@ log_dir='relatorios/etapa5'
 mkdir -p "$log_dir" "$log_dir/objetos"
 test -d "$sdk/include/c++/v1"
 test -d "$upstream/runtime/src"
+# O OpenOrbis traz libc++ com <bit> mas sem std::bit_cast neste alvo.
+# Modificamos APENAS a copia temporaria do upstream usada no runner.
+python3 - "$upstream/runtime/include/nx/cpu.h" <<'PY_KAZUMA_CPU'
+from pathlib import Path
+import sys
+p = Path(sys.argv[1])
+s = p.read_text(encoding='utf-8')
+if 'nx::kazuma_bit_cast' in s:
+    print('Fallback bit_cast ja presente na copia temporaria')
+else:
+    needle = 'namespace nx {\n'
+    if s.count(needle) != 1 or s.count('std::bit_cast') < 1:
+        raise SystemExit('cpu.h mudou: interrupcao para revisao, sem patch parcial')
+    replacement = (needle +
+        '// Compatibilidade C++20 com o libc++ do OpenOrbis; apenas no runner.\n'
+        'template <typename To, typename From>\n'
+        'inline To kazuma_bit_cast(const From& value) noexcept {\n'
+        '    static_assert(sizeof(To) == sizeof(From), "bit_cast size mismatch");\n'
+        '    return __builtin_bit_cast(To, value);\n'
+        '}\n')
+    s = s.replace(needle, replacement, 1)
+    s = s.replace('std::bit_cast', 'nx::kazuma_bit_cast')
+    p.write_text(s, encoding='utf-8')
+    print('Fallback aplicado SOMENTE na copia upstream do CI')
+PY_KAZUMA_CPU
 
 clang_flags=(
   --target=x86_64-pc-freebsd12-elf
-  -std=c++20 -fPIC -fno-exceptions -funwind-tables -O1
+  -std=c++20 -D_POSIX_C_SOURCE=200809L -fPIC -fno-exceptions -funwind-tables -O1
   -isysroot "$sdk"
   -isystem "$sdk/include"
   -isystem "$sdk/include/c++/v1"
