@@ -1,0 +1,66 @@
+name: "Kazuma - Etapa 7: localizar provedores do runtime para PS4 (SEM JOGO)"
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/kazuma-etapa7-provedores.yml'
+      - 'tools/etapa7/**'
+      - 'docs/KAZUMA_ETAPA7_PROVEDORES.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  auditar-provedores:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Obter somente codigo publico Kazuma
+        uses: actions/checkout@v4
+      - name: Instalar ferramentas
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang lld binutils curl ca-certificates git python3
+      - name: Obter upstream publico em revisao fixa
+        run: |
+          set -euo pipefail
+          git clone --quiet --filter=blob:none https://github.com/SwonDev/cstlvnia-blmont-to-macos.git "$RUNNER_TEMP/upstream"
+          git -C "$RUNNER_TEMP/upstream" checkout -q --detach 4043f21bb4f656d34cd17ba070238c7728d00631
+          test "$(git -C "$RUNNER_TEMP/upstream" rev-parse HEAD)" = 4043f21bb4f656d34cd17ba070238c7728d00631
+          echo "KAZUMA_UPSTREAM=$RUNNER_TEMP/upstream" >> "$GITHUB_ENV"
+      - name: Obter OpenOrbis v0.5.4 com hash validado
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sdk-bundle" "$RUNNER_TEMP/sdk"
+          curl --fail --location --retry 3 --retry-delay 3 \
+            'https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz' \
+            -o "$RUNNER_TEMP/sdk-bundle/openorbis.tar.gz"
+          echo '3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526  '"$RUNNER_TEMP/sdk-bundle/openorbis.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/sdk-bundle/openorbis.tar.gz" -C "$RUNNER_TEMP/sdk"
+          sdk_link="$(find "$RUNNER_TEMP/sdk" -type f -name link.x -print -quit)"
+          test -n "$sdk_link"
+          echo "OO_PS4_TOOLCHAIN=$(dirname "$sdk_link")" >> "$GITHUB_ENV"
+      - name: Reproduzir os quatro objetos originais da etapa 5
+        run: |
+          set -euo pipefail
+          bash tools/etapa5/compilar_runtime_ps4.sh "$OO_PS4_TOOLCHAIN" "$KAZUMA_UPSTREAM" 2>&1 | tee etapa5_reproducao.txt
+          test "$(awk -F '\t' '$2=="PASS"{n++} END{print n+0}' relatorios/etapa5/resultados.tsv)" -eq 4
+      - name: Compilar provedores originais e mapear simbolos
+        run: |
+          set -euo pipefail
+          mkdir -p relatorios/etapa7
+          bash tools/etapa7/auditar_provedores.sh "$OO_PS4_TOOLCHAIN" "$KAZUMA_UPSTREAM" 2>&1 | tee relatorios/etapa7/execucao.txt
+          test -s relatorios/etapa7/resumo.json
+      - name: Publicar relatorios, inclusive em falhas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kazuma-etapa7-relatorios-provedores-SEM-JOGO
+          path: |
+            etapa5_reproducao.txt
+            relatorios/etapa5/resultados.tsv
+            relatorios/etapa7/
+          if-no-files-found: warn
+          retention-days: 21
