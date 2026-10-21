@@ -32,6 +32,7 @@ mkdir -p "$scratch/pkgroot/sce_sys"
 
 printf '[1/6] Compilando fonte livre de interface de video e nossa tela...\n'
 flags=(--target=x86_64-pc-freebsd12-elf -std=c++17 -O1 -fPIC -funwind-tables \
+  -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
   -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
   -I"$samples/samples/_common")
 clang++ "${flags[@]}" -c tools/etapa12/tela_kazuma.cpp -o "$scratch/main.o" \
