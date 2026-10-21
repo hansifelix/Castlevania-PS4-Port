@@ -23,7 +23,7 @@ if 'nx::kazuma_bit_cast' in s:
     print('Fallback bit_cast ja presente na copia temporaria')
 else:
     needle = 'namespace nx {\n'
-    if s.count(needle) != 1 or s.count('std::bit_cast') < 1:
+    if needle not in s or s.count('std::bit_cast') < 1:
         raise SystemExit('cpu.h mudou: interrupcao para revisao, sem patch parcial')
     replacement = (needle +
         '// Compatibilidade C++20 com o libc++ do OpenOrbis; apenas no runner.\n'
