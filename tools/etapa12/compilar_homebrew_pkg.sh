@@ -75,6 +75,23 @@ test -s "$scratch/pkgroot/eboot.bin"
 cp tools/etapa12/assets/icon0.png "$scratch/pkgroot/sce_sys/icon0.png"
 
 printf '[5/6] Construindo param.sfo + projeto .gp4 + pacote .pkg...\n'
+# KAZUMA_ETAPA12_LIBSSL_COMPAT_START
+# O PkgTool.Core do SDK usa .NET legado e nao carrega apenas libssl3 no Ubuntu 24.04.
+# Extraimos libssl 1.1 em pasta TEMPORARIA; NAO instalamos no runner, celular ou PS4.
+# A copia vem de pacote oficial do Ubuntu 20.04 (arquivo de seguranca 2025).
+# Somente esta etapa efemera de empacotamento usa a biblioteca de compatibilidade.
+echo '[5/6] Preparando biblioteca de compatibilidade do empacotador OpenOrbis...'
+command -v dpkg-deb >/dev/null || { echo 'dpkg-deb ausente no runner' >&2; exit 1; }
+mkdir -p "$scratch/ssl11"
+curl --fail --silent --show-error --location --retry 3 --retry-delay 2 \
+  'https://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb' \
+  -o "$scratch/libssl11.deb"
+dpkg-deb -x "$scratch/libssl11.deb" "$scratch/ssl11"
+legacy_ssl="$scratch/ssl11/usr/lib/x86_64-linux-gnu"
+test -s "$legacy_ssl/libssl.so.1.1" || { echo 'Compatibilidade OpenSSL1.1 nao encontrada' >&2; exit 1; }
+test -s "$legacy_ssl/libcrypto.so.1.1" || { echo 'Compatibilidade libcrypto1.1 nao encontrada' >&2; exit 1; }
+export LD_LIBRARY_PATH="$legacy_ssl${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+# KAZUMA_ETAPA12_LIBSSL_COMPAT_END
 packager="$sdk/bin/linux/PkgTool.Core"
 gp4tool="$sdk/bin/linux/create-gp4"
 for file in "$packager" "$gp4tool"; do
