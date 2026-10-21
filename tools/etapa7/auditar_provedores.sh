@@ -126,7 +126,9 @@ else
 fi
 # Não entregar objetos binarios para usuario: apenas logs e mapas dos simbolos.
 rm -f "$out/quatro_componentes.o" "$out/com_provedores.o"
-rm -rf "$out/objetos"
+if [[ "${KAZUMA_ETAPA8_GUARDAR_OBJETOS:-0}" != 1 ]]; then
+  rm -rf "$out/objetos"
+fi
 cat "$out/compilacao.tsv"
 if (( failures > 0 )); then
   echo "ETAPA7: falhas reais detectadas ($failures); CI deve ficar vermelho." >&2
