@@ -46,7 +46,25 @@ failures=0
 for i in "${!names[@]}"; do
   name="${names[$i]}"; input="$upstream/${paths[$i]}"; obj="$out/objetos/$name.o"
   echo "[ETAPA7] Compilando provedor PUBLICO: ${paths[$i]}"
-  if clang++ "${common[@]}" -c "$input" -o "$obj" > "$out/$name.log" 2>&1; then
+  # Teste isolado: no OpenOrbis, libc++ referencia vasprintf sem declaracao
+  # visivel ao compilar loader.cpp com _POSIX_C_SOURCE=200809L.
+  # Apenas declaramos a interface, sem implementacao inventada e sem link final.
+  extra_flags=()
+  if [[ "$name" == loader ]]; then
+    compat_header="$out/kazuma_loader_vasprintf_compat.h"
+    cat > "$compat_header" <<'KAZUMA_VASPRINTF_HEADER'
+#include <stdarg.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
+int vasprintf(char **, const char *, va_list);
+#ifdef __cplusplus
+}
+#endif
+KAZUMA_VASPRINTF_HEADER
+    extra_flags=(-include "$compat_header")
+  fi
+  if clang++ "${common[@]}" "${extra_flags[@]}" -c "$input" -o "$obj" > "$out/$name.log" 2>&1; then
     if ! readelf -h "$obj" > "$out/${name}_elf.txt" || \
        ! grep -Eq 'Type:[[:space:]]*REL' "$out/${name}_elf.txt" || \
        ! grep -Eq 'Machine:[[:space:]]*Advanced Micro Devices X86-64' "$out/${name}_elf.txt"; then
