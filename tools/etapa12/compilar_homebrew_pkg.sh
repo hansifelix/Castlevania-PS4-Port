@@ -73,6 +73,27 @@ OO_PS4_TOOLCHAIN="$sdk" "$scratch/create-fself" \
 test -s "$scratch/kazuma_12.oelf"
 test -s "$scratch/pkgroot/eboot.bin"
 cp tools/etapa12/assets/icon0.png "$scratch/pkgroot/sce_sys/icon0.png"
+# KAZUMA_TESTE_PKG_REVISADO_START
+# O primeiro PKG tinha apenas eboot, icon0 e param.sfo. Reproduzir estrutura
+# de empacotamento dos exemplos OpenOrbis para diagnosticar erro no PS4.
+mkdir -p "$scratch/pkgroot/sce_sys/about" "$scratch/pkgroot/sce_module"
+right_file="$(find "$sdk" -type f -name right.sprx -print -quit)"
+if [[ -z "$right_file" ]]; then
+  echo 'FALHA: right.sprx nao encontrado no SDK. Abortando em vez de gerar pacote incompleto.' >&2
+  exit 1
+fi
+cp "$right_file" "$scratch/pkgroot/sce_sys/about/right.sprx"
+echo "Incluido sce_sys/about/right.sprx"
+for module in libc.prx libSceFios2.prx; do
+  module_path="$(find "$sdk" -type f -name "$module" -print -quit)"
+  if [[ -n "$module_path" ]]; then
+    cp "$module_path" "$scratch/pkgroot/sce_module/$module"
+    echo "Incluido sce_module/$module (modulo publico do SDK)"
+  else
+    echo "AVISO: $module nao encontrado no SDK; verificacao de runtime ainda pendente."
+  fi
+done
+# KAZUMA_TESTE_PKG_REVISADO_END
 
 printf '[5/6] Construindo param.sfo + projeto .gp4 + pacote .pkg...\n'
 # KAZUMA_ETAPA12_LIBSSL_COMPAT_START
@@ -101,7 +122,7 @@ done
 TITLE_ID='BREW91234'
 CONTENT_ID='IV0000-BREW91234_00-KAZUMATESTPS4BR0'
 TITLE='Kazuma Port Games BR - Test 01'
-VERSION='1.00'
+VERSION='1.01'
 pkgroot="$scratch/pkgroot"
 (
   cd "$pkgroot"
@@ -116,7 +137,12 @@ pkgroot="$scratch/pkgroot"
   "$packager" sfo_setentry sce_sys/param.sfo TITLE --type Utf8 --maxsize 128 --value "$TITLE"
   "$packager" sfo_setentry sce_sys/param.sfo TITLE_ID --type Utf8 --maxsize 12 --value "$TITLE_ID"
   "$packager" sfo_setentry sce_sys/param.sfo VERSION --type Utf8 --maxsize 8 --value "$VERSION"
-  "$gp4tool" -out pkg.gp4 --content-id="$CONTENT_ID" --files 'eboot.bin sce_sys/param.sfo sce_sys/icon0.png'
+  pkg_files=(eboot.bin sce_sys/param.sfo sce_sys/icon0.png sce_sys/about/right.sprx)
+  for module in libc.prx libSceFios2.prx; do
+    if [[ -s "sce_module/$module" ]]; then pkg_files+=("sce_module/$module"); fi
+  done
+  printf '%s\n' "${pkg_files[@]}" > "$out/manifesto_pkg.txt"
+  "$gp4tool" -out pkg.gp4 --content-id="$CONTENT_ID" --files "${pkg_files[*]}"
   "$packager" pkg_build pkg.gp4 .
 ) >"$out/empacotar.stdout.txt" 2>"$out/empacotar.stderr.txt" || {
   cat "$out/empacotar.stdout.txt" "$out/empacotar.stderr.txt" >&2; exit 1;
