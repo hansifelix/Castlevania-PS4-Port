@@ -1,0 +1,78 @@
+name: "Kazuma - Etapa 6: auditoria de ligacao do runtime (SEM JOGO)"
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/kazuma-etapa6-ligacao.yml'
+      - 'tools/etapa6/**'
+      - 'docs/KAZUMA_ETAPA6_LIGACAO.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  auditar-ligacao:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Obter apenas o codigo publico Kazuma
+        uses: actions/checkout@v4
+
+      - name: Instalar dependencias da compilacao e auditoria
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang lld binutils curl ca-certificates git python3
+
+      - name: Obter runtime publico original em revisao fixa
+        run: |
+          set -euo pipefail
+          git clone --quiet --filter=blob:none https://github.com/SwonDev/cstlvnia-blmont-to-macos.git "$RUNNER_TEMP/upstream"
+          git -C "$RUNNER_TEMP/upstream" checkout -q --detach 4043f21bb4f656d34cd17ba070238c7728d00631
+          test "$(git -C "$RUNNER_TEMP/upstream" rev-parse HEAD)" = 4043f21bb4f656d34cd17ba070238c7728d00631
+          echo "KAZUMA_UPSTREAM=$RUNNER_TEMP/upstream" >> "$GITHUB_ENV"
+
+      - name: Obter OpenOrbis 0.5.4 com verificacao SHA256
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sdk-bundle" "$RUNNER_TEMP/sdk"
+          curl --fail --location --retry 3 --retry-delay 3 \
+            'https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz' \
+            -o "$RUNNER_TEMP/sdk-bundle/openorbis.tar.gz"
+          echo '3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526  '"$RUNNER_TEMP/sdk-bundle/openorbis.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/sdk-bundle/openorbis.tar.gz" -C "$RUNNER_TEMP/sdk"
+          sdk_link="$(find "$RUNNER_TEMP/sdk" -type f -name link.x -print -quit)"
+          test -n "$sdk_link"
+          sdk="$(dirname "$sdk_link")"
+          test -f "$sdk/lib/crt1.o"
+          echo "OO_PS4_TOOLCHAIN=$sdk" >> "$GITHUB_ENV"
+
+      - name: Reproduzir Etapa 5 - compilar 4 unidades reais do runtime publico
+        run: |
+          set -euo pipefail
+          bash tools/etapa5/compilar_runtime_ps4.sh "$OO_PS4_TOOLCHAIN" "$KAZUMA_UPSTREAM" 2>&1 | tee etapa5-reproducao.txt
+          test "$(awk -F '\t' '$2=="PASS"{n++} END{print n+0}' relatorios/etapa5/resultados.tsv)" -eq 4
+
+      - name: Analisar simbolos externos e realizar ligacao ELF relocavel
+        run: |
+          set -euo pipefail
+          mkdir -p relatorios/etapa6
+          bash tools/etapa6/auditar_ligacao.sh relatorios/etapa5/objetos relatorios/etapa6 2>&1 | tee relatorios/etapa6/execucao.txt
+          test -s relatorios/etapa6/resumo.json
+
+      - name: Publicar relatorios mesmo em caso de falha
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kazuma-etapa6-auditoria-ligacao-sem-jogo
+          path: |
+            etapa5-reproducao.txt
+            relatorios/etapa5/resultados.tsv
+            relatorios/etapa5/*.txt
+            relatorios/etapa6/
+          if-no-files-found: warn
+          retention-days: 21
