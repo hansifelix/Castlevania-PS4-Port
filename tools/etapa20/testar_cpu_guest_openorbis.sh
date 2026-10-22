@@ -14,11 +14,49 @@ out="$(pwd)/relatorios/etapa20"
 mkdir -p "$out"
 # Isolar os binarios intermediarios: o repositorio recebe somente diagnosticos.
 scratch="$(mktemp -d)"; trap 'rm -rf "$scratch"' EXIT
+# Compatibilidade LOCAL do header publicamente disponivel nx/cpu.h para libc++ antigo.
+# A cópia upstream é preservada; apenas o arquivo temporário será adaptado.
+mkdir -p "$scratch/compat/nx"
+cat > "$scratch/compat/nx/kazuma_cpu_compat.h" <<'CPP_COMPAT'
+#pragma once
+#include <cstdlib> // introduz ::abs antes de <cmath> do libc++ do SDK
+#include <cstdint>
+#include <type_traits>
+namespace kazuma_cpu_compat {
+template <typename To, typename From>
+constexpr To bit_cast(const From& from) noexcept {
+    static_assert(sizeof(To) == sizeof(From), "bit_cast: tamanhos diferentes");
+    static_assert(std::is_trivially_copyable_v<To> && std::is_trivially_copyable_v<From>,
+                  "bit_cast: tipos nao triviais");
+    return __builtin_bit_cast(To, from);
+}
+template <typename T>
+constexpr T rotr(T value, int shift) noexcept {
+    static_assert(std::is_unsigned_v<T>, "rotr: requer tipo sem sinal");
+    constexpr int bits=int(sizeof(T)*8);
+    int n=((shift % bits) + bits) % bits;
+    return n ? T((value >> n) | (value << (bits-n))) : value;
+}
+}
+CPP_COMPAT
+python3 - "$nx/runtime/include/nx/cpu.h" "$scratch/compat/nx/cpu.h" <<'PY_COMPAT'
+from pathlib import Path
+import sys
+orig=Path(sys.argv[1]).read_text(encoding='utf-8')
+assert orig.count('#include <bit>')==1, 'Upstream mudou include bit'
+assert orig.count('std::bit_cast')>=5, 'Upstream mudou funcoes bit_cast'
+assert orig.count('std::rotr(')==2, 'Upstream mudou rotr'
+patched=(orig.replace('#include <bit>', '#include "kazuma_cpu_compat.h"')
+             .replace('std::bit_cast', 'kazuma_cpu_compat::bit_cast')
+             .replace('std::rotr(', 'kazuma_cpu_compat::rotr('))
+Path(sys.argv[2]).write_text(patched,encoding='utf-8')
+print('Adaptacao local do header nx: std::bit_cast e std::rotr substituidos, upstream intacto.')
+PY_COMPAT
 printf '[1/4] Cross-compilando contrato nx::CPU com OpenOrbis para x86_64 PS4...\n'
 clang++ --target=x86_64-pc-freebsd12-elf -std=c++20 -O1 -fPIC -funwind-tables \
     -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
     -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
-    -I"$nx/runtime/include" \
+    -I"$scratch/compat" -I"$nx/runtime/include" \
     -c tools/etapa20/cpu_probe.cpp -o "$scratch/probe.o" \
     >"$out/compilar.stdout.txt" 2>"$out/compilar.stderr.txt" || {
         cat "$out/compilar.stderr.txt" >&2; exit 1;
