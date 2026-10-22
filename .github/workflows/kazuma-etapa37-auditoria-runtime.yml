@@ -82,6 +82,34 @@ jobs:
                     .replace('std::rotr(', 'kazuma_cpu_compat::rotr('))
           Path(sys.argv[2]).write_text(patched, encoding='utf-8')
           PY_COMPAT
+      - name: Corrigir 2 incompatibilidades C++ somente no runner (nao altera upstream)
+        run: |
+          set -euo pipefail
+          python3 - <<'PY_FIX_NVNS'
+          from pathlib import Path
+          import os
+          root = Path(os.environ['KAZUMA_NX_SOURCE']) / 'runtime/src/nvn'
+          a = root / 'nvn_binds.cpp'
+          source = a.read_text(encoding='utf-8')
+          # Ordem de includes equivalente a nvn_debug.cpp (que ja compila no OpenOrbis).
+          marker = '#include <atomic>'
+          assert source.count(marker) == 1 and '#include <cmath>' in source
+          assert source.index(marker) < source.index('#include <cmath>')
+          a.write_text(source.replace(marker, '#include <algorithm>' + chr(10) + marker, 1), encoding='utf-8')
+          b = root / 'nvn_debug.cpp'
+          source = b.read_text(encoding='utf-8')
+          # OpenOrbis deduz double em std::ldexp; std::max quer tipos identicos.
+          before = 'else big = std::max(big, std::ldexp(float(1024 + m), int(e) - 25) * (e ? 1.0f : 0.0f));'
+          after  = 'else big = std::max(big, static_cast<float>(std::ldexp(float(1024 + m), int(e) - 25) * (e ? 1.0f : 0.0f)));'
+          assert source.count(before) == 1, 'Upstream mudou, abortar em vez de aplicar patch errado.'
+          b.write_text(source.replace(before, after, 1), encoding='utf-8')
+          (Path('relatorios/etapa37') / 'CORRECOES_TEMPORARIAS.txt').write_text(
+              'nvn_binds.cpp: algorithm antes de cmath para incluir abs (libc++ OpenOrbis).'+chr(10)+
+              'nvn_debug.cpp: static_cast<float> antes de std::max.'+chr(10)+
+              'Modificacoes realizadas apenas no checkout temporario do GitHub runner.'+chr(10),
+              encoding='utf-8')
+          print('Dois bloqueios de compilacao tratados, sem modificar repositorio upstream.')
+          PY_FIX_NVNS
       - name: Inventariar e compilar unidades portaveis de TODO runtime
         run: |
           set -euo pipefail
