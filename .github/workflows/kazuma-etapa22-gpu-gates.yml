@@ -25,7 +25,7 @@ jobs:
           set -euo pipefail
           git clone --quiet --filter=blob:none --sparse https://github.com/SwonDev/cstlvnia-blmont-to-macos.git "$RUNNER_TEMP/nx-src"
           git -C "$RUNNER_TEMP/nx-src" checkout -q --detach 4043f21bb4f656d34cd17ba070238c7728d00631
-          git -C "$RUNNER_TEMP/nx-src" sparse-checkout set runtime/src/nvn runtime/src/platform.h
+          git -C "$RUNNER_TEMP/nx-src" sparse-checkout set runtime/src/nvn
           test -s "$RUNNER_TEMP/nx-src/runtime/src/nvn/nvn_vk.cpp"
       - name: Obter OpenOrbis SDK imutavel por SHA256 para inventario de headers
         run: |
