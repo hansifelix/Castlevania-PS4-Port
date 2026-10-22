@@ -1,0 +1,58 @@
+name: 'Kazuma - Etapa 18: auditoria ESTATICA memoria guest (SEM PKG)'
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/kazuma-etapa18-mapa-memoria.yml'
+      - 'tools/etapa18/**'
+      - 'docs/KAZUMA_ETAPA18_MAPA_MEMORIA.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  auditar-mapa:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Checkout Kazuma
+        uses: actions/checkout@v4
+      - name: Testes locais sem rede
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/etapa18/tests -v
+          python3 -m py_compile tools/etapa18/auditar_mapa.py
+      - name: Obter apenas cabecalhos publicos nx de revisao fixa
+        run: |
+          set -euo pipefail
+          git clone --quiet --filter=blob:none --sparse https://github.com/SwonDev/cstlvnia-blmont-to-macos.git "$RUNNER_TEMP/nx-source"
+          git -C "$RUNNER_TEMP/nx-source" checkout -q --detach 4043f21bb4f656d34cd17ba070238c7728d00631
+          git -C "$RUNNER_TEMP/nx-source" sparse-checkout set runtime/include/nx
+          test -s "$RUNNER_TEMP/nx-source/runtime/include/nx/runtime.h"
+          test -s "$RUNNER_TEMP/nx-source/runtime/include/nx/cpu.h"
+      - name: Auditar faixas NOMINAIS - Linux Android macOS
+        run: |
+          set -euo pipefail
+          python3 tools/etapa18/auditar_mapa.py \
+            --runtime "$RUNNER_TEMP/nx-source/runtime/include/nx/runtime.h" \
+            --cpu "$RUNNER_TEMP/nx-source/runtime/include/nx/cpu.h" \
+            --out relatorios/etapa18
+          python3 - <<'PY_CHECK'
+          import json
+          from pathlib import Path
+          for p in ('linux','android','macos'):
+              x=json.loads(Path(f'relatorios/etapa18/mapa_{p}.json').read_text())
+              assert x['etapa']==18
+              assert x['plataforma_original']==p
+              assert x['ps4_mapa_real_verificado'] is False
+              assert x['enderecos_seguros_ps4_identificados'] is False
+              assert x['nx_plat_reserve_commit_decommit_testados_ps4'] is False
+              assert len(x['regioes'])==5
+          print('ETAPA 18: auditoria estatica concluida; nenhum PKG produzido.')
+          PY_CHECK
+      - name: Publicar SOMENTE relatorios, sem PKG
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kazuma-etapa18-analise-mapa-sem-pkg
+          path: relatorios/etapa18/
+          if-no-files-found: warn
+          retention-days: 30
