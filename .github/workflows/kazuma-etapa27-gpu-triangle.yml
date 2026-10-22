@@ -1,0 +1,185 @@
+name: 'Kazuma Etapa 27 - GPU REAL preparacao triangulo Vulkan (PKG sem instalacao)'
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/kazuma-etapa27-gpu-triangle.yml'
+      - 'tools/etapa27/**'
+      - 'docs/KAZUMA_ETAPA27_GPU_REAL.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preparar-teste-gpu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - name: Checkout Kazuma
+        uses: actions/checkout@v4
+      - name: Validar scripts de verificacao
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/etapa27/verificar_pacote.py
+          python3 -m py_compile tools/etapa27/patch_triangle_pause.py
+          python3 -m py_compile tools/etapa27/patch_triangle_gnm_submitdone.py
+          python3 -m unittest discover -s tools/etapa27/tests -v
+      - name: Instalar dependencias de build no runner
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends cmake ninja-build glslang-tools file curl dpkg
+      - name: Checkout kit publico FIXO
+        uses: actions/checkout@v4
+        with:
+          repository: orbis-ports/orbis-porting-kit
+          ref: 213b0c38ff25ea7ca402c8844a6494086d0f1cae
+          path: .orbis/kit
+      - name: Preparar SDK + Mesa RADV emparelhados
+        uses: ./.orbis/kit/.github/actions/setup-orbis
+        with:
+          sdk-bundle: orbis-sdk-v1
+      - name: Gerar exemplo publico de triangulo Vulkan e seu eboot
+        run: |
+          set -euo pipefail
+          mkdir -p relatorios/etapa27
+          echo 'Kit fixo: 213b0c38ff25ea7ca402c8844a6494086d0f1cae' > relatorios/etapa27/FONTES.txt
+          echo 'Bundle: orbis-sdk-v1' >> relatorios/etapa27/FONTES.txt
+          # KAZUMA_TEST08_SRC_PAUSA: preservar fonte upstream e adaptar copia temporaria.
+          test_src="$RUNNER_TEMP/kazuma28-src"
+          mkdir -p "$test_src"
+          cp -a "$ORBIS_KIT_DIR/examples/triangle/." "$test_src/"
+          python3 tools/etapa27/patch_triangle_pause.py "$test_src/triangle.c"
+          # KAZUMA_TEST09_GNM_SUBMITDONE: testar a API GNM em copia temporaria.
+          python3 tools/etapa27/patch_triangle_gnm_submitdone.py "$test_src/triangle.c"
+          grep -q KAZUMA_TEST09_GNM_SUBMITDONE "$test_src/triangle.c"
+          # GNM e Vulkan sao APIs distintas; link explicito com libSceGnmDriver.
+          printf "\ntarget_link_libraries(triangle PRIVATE SceGnmDriver)\n" >> "$test_src/CMakeLists.txt"
+          grep -q 'KAZUMA_TEST08_MAX_FRAMES = 300UL' "$test_src/triangle.c"
+          cmake -S "$test_src" -B "$RUNNER_TEMP/kazuma27-build" -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ORBIS_KIT_DIR/cmake/ps4-openorbis.cmake" \
+            -DORBIS_KIT_DIR="$ORBIS_KIT_DIR" \
+            -DORBIS_MESA_SRC="$ORBIS_MESA_SRC" \
+            -DORBIS_MESA_BUILD="$ORBIS_MESA_BUILD" \
+            2>&1 | tee relatorios/etapa27/CONFIG.log
+          cmake --build "$RUNNER_TEMP/kazuma27-build" --parallel 2 \
+            2>&1 | tee relatorios/etapa27/BUILD.log
+          python3 tools/etapa27/verificar_pacote.py \
+            --build "$RUNNER_TEMP/kazuma27-build" --out relatorios/etapa27 --fase eboot
+      - name: Empacotar homebrew independente para PS4 (NAO INSTALAR)
+        run: |
+          set -euo pipefail
+          mkdir -p relatorios/etapa27 pacotes/etapa27
+          # KAZUMA_PRX_V2_PINNED: PRXs de exemplo publico, verificados por SHA-1 do Git.
+          # Fonte: OpenOrbis/OpenOrbis-PS4-Toolchain @ 0a1aaf9dd4a92695538bdeb09fb056d06dd11725
+          # A presenca dos PRXs nao prova carga, execucao ou compatibilidade na GPU.
+          sdkmodules="$OO_PS4_TOOLCHAIN/src/modules"
+          mkdir -p "$sdkmodules" relatorios/etapa27
+          origin='https://raw.githubusercontent.com/OpenOrbis/OpenOrbis-PS4-Toolchain/0a1aaf9dd4a92695538bdeb09fb056d06dd11725/samples/piglet/sce_module'
+          log='relatorios/etapa27/ORIGEM_E_VERIFICACAO_PRX.txt'
+          echo 'Fonte: OpenOrbis/OpenOrbis-PS4-Toolchain 0a1aaf9dd4a92695538bdeb09fb056d06dd11725' > "$log"
+          for entry in 'libc.prx e49b25d011281d52131a34d5a18106dd49605919 3424' 'libSceFios2.prx 1f83bdc8f1fd0ddf6a56f0d5faa1d914e35095fa 3200'; do
+            read -r mod expected size <<< "$entry"
+            f="$sdkmodules/$mod"
+            curl --fail --silent --show-error --location --retry 3 --max-time 120 -o "$f" "$origin/$mod"
+            actual="$(git hash-object "$f")"
+            actual_size="$(stat -c%s "$f")"
+            if [[ "$actual" != "$expected" || "$actual_size" != "$size" ]]; then
+              echo "BLOQUEIO: hash/tamanho inesperado em $mod; nao distribuir o PKG" | tee -a "$log"
+              exit 1
+            fi
+            echo "OK: $mod GitBlob=$actual tamanho=$actual_size" | tee -a "$log"
+            file "$f" | tee -a "$log"
+          done
+          # make-pkg.sh copia automaticamente $OO_PS4_TOOLCHAIN/src/modules/*.prx.
+          export ORBIS_WORK="$RUNNER_TEMP/kazuma27-orbis-work"
+          bash "$ORBIS_KIT_DIR/scripts/ps4/make-pkg.sh" \
+            --eboot "$RUNNER_TEMP/kazuma27-build/eboot.bin" \
+            --out-dir "$RUNNER_TEMP/kazuma27-pkg" \
+            --title-id BREW91240 \
+            --title 'Kazuma GPU Vulkan Test 09 GNM' \
+            --content-label 'KAZUMAVULKANGPU1' \
+            --version 01.02 \
+            --icon 'tools/etapa12/assets/icon0.png' \
+            2>&1 | tee relatorios/etapa27/PKG_BUILD.log
+          # Etapa 27 — Klog real do PS4: PRX_SCE_MODULE_LOAD_ERROR / 0xa0020102.
+          # Este teste identifica modulos ausentes no pacote ANTES de qualquer distribuicao.
+          stage="$RUNNER_TEMP/kazuma27-pkg/pkg-stage"
+          report="relatorios/etapa27/DIAGNOSTICO_PRX_KLOG.txt"
+          {
+            echo 'Kazuma Test 07 — auditoria PRX apos erro observado no hardware'
+            echo 'Klog: Lack of a .prx file in /app0/sce_module; codigo 0xa0020102'
+            echo 'A mensagem nao diz QUAL modulo especifico esta faltando.'
+            echo "stage=$stage"
+            echo '--- Conteudo do sce_module (stage) ---'
+            if [[ -d "$stage/sce_module" ]]; then
+              find "$stage/sce_module" -maxdepth 1 -type f -printf '%f | %s bytes\n' | sort
+            else
+              echo 'DIRETORIO sce_module AUSENTE'
+            fi
+            echo '--- Localizacoes candidatas no SDK ---'
+            for sdkdir in "${OO_PS4_TOOLCHAIN:-}/src/modules" "${OO_PS4_TOOLCHAIN:-}/bin/data/modules"; do
+              echo "Diretorio: $sdkdir"
+              if [[ -d "$sdkdir" ]]; then
+                find "$sdkdir" -maxdepth 2 -type f \( -name '*.prx' -o -name '*.sprx' \) -printf '%P | %s bytes\n' | sort
+              else
+                echo 'Nao encontrado'
+              fi
+            done
+            echo '--- Icone (aviso independente do erro PRX) ---'
+            if [[ -s "$stage/sce_sys/icon0.png" ]]; then echo 'icon0.png presente'; else echo 'icon0.png ausente'; fi
+          } > "$report"
+          # KAZUMA_ICON_TEST07_GATE_V1: o klog encontrou icon0.png ausente.
+          # Corrige apenas apresentacao/metadados; nao garante inicializacao Vulkan.
+          icon="$stage/sce_sys/icon0.png"
+          if [[ ! -s "$icon" ]] || ! grep -Fq 'sce_sys/icon0.png' "$stage/pkg.gp4"; then
+            echo 'BLOQUEIO: icon0.png nao encontrado ou ausente do manifesto' | tee -a "$report"
+            exit 1
+          fi
+          python3 - "$icon" <<'PYICON' | tee -a "$report"
+          import pathlib, struct, sys
+          p=pathlib.Path(sys.argv[1])
+          data=p.read_bytes()
+          if len(data)<33 or data[:8]!=b'\x89PNG\r\n\x1a\n' or data[12:16]!=b'IHDR':
+              raise SystemExit('BLOQUEIO: icon0.png tem cabecalho PNG invalido')
+          w,h=struct.unpack('>II',data[16:24])
+          if not (0<w<=4096 and 0<h<=4096):
+              raise SystemExit('BLOQUEIO: dimensoes PNG invalidas')
+          print(f'PRESENTE: icon0.png {w}x{h} ({len(data)} bytes)')
+          PYICON
+          falhou=0
+          for mod in libc.prx libSceFios2.prx; do
+            f="$stage/sce_module/$mod"
+            if [[ ! -s "$f" ]]; then
+              echo "BLOQUEIO: $mod nao encontrado no pacote" | tee -a "$report"
+              falhou=1
+            elif ! grep -Fq "sce_module/$mod" "$stage/pkg.gp4"; then
+              echo "BLOQUEIO: $mod nao registrado no pkg.gp4" | tee -a "$report"
+              falhou=1
+            else
+              echo "PRESENTE: $mod (nao prova que sera carregado pelo PS4)" | tee -a "$report"
+              sha256sum "$f" | tee -a "$report"
+            fi
+          done
+          if [[ "$falhou" != 0 ]]; then
+            cat "$report"
+            echo 'ERRO: nao publicar novo PKG; investigar os modulos PRX faltantes.'
+            exit 1
+          fi
+          cat "$report"
+          echo 'Gate PRX basico aprovado; causa exata do crash ainda precisa ser reavaliada.'
+          python3 tools/etapa27/verificar_pacote.py \
+            --build "$RUNNER_TEMP/kazuma27-build" \
+            --pkg-dir "$RUNNER_TEMP/kazuma27-pkg" \
+            --out relatorios/etapa27 --fase pkg
+          cp "$RUNNER_TEMP/kazuma27-pkg/IV0000-BREW91240_00-KAZUMAVULKANGPU1.pkg" pacotes/etapa27/
+          sha256sum pacotes/etapa27/*.pkg | tee relatorios/etapa27/PKG_SHA256.txt
+          echo 'CI concluiu preparo do teste Vulkan; execucao na GPU PS4 NAO realizada.'
+      - name: Guardar diagnosticos e PKG experimental sem instalar
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kazuma-test09-gnm-submitdone-pkg-nao-testado
+          path: |
+            relatorios/etapa27/
+            pacotes/etapa27/*.pkg
+          if-no-files-found: warn
+          retention-days: 15

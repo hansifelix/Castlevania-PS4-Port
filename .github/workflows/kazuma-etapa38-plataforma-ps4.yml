@@ -1,0 +1,68 @@
+name: 'Kazuma Etapa 38 - adaptador real minimo de plataforma PS4 (SEM PKG)'
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/kazuma-etapa38-plataforma-ps4.yml'
+      - 'tools/etapa38/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compilar-adaptador:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout Kazuma
+        uses: actions/checkout@v4
+      - name: Instalar ferramentas
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang-18 llvm-18 binutils git curl ca-certificates
+      - name: Preparar SDK validado e interface upstream publica
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sdk" "$RUNNER_TEMP/download" relatorios/etapa38
+          curl -fLsS --retry 3 --retry-delay 3 \
+            'https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz' \
+            -o "$RUNNER_TEMP/download/openorbis.tar.gz"
+          echo '3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526  '"$RUNNER_TEMP/download/openorbis.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/download/openorbis.tar.gz" -C "$RUNNER_TEMP/sdk"
+          sdk_link="$(find "$RUNNER_TEMP/sdk" -type f -name link.x -print -quit)"
+          test -n "$sdk_link"
+          echo "OO_PS4_TOOLCHAIN=$(dirname "$sdk_link")" >> "$GITHUB_ENV"
+          git clone -q --filter=blob:none --sparse https://github.com/SwonDev/cstlvnia-blmont-to-macos.git "$RUNNER_TEMP/nx-src"
+          git -C "$RUNNER_TEMP/nx-src" checkout -q --detach 4043f21bb4f656d34cd17ba070238c7728d00631
+          git -C "$RUNNER_TEMP/nx-src" sparse-checkout set runtime/src
+          test -s "$RUNNER_TEMP/nx-src/runtime/src/platform.h"
+          git -C "$RUNNER_TEMP/nx-src" show HEAD:LICENSE > relatorios/etapa38/LICENCA_UPSTREAM.txt
+          echo "KAZUMA_PLATFORM_H=$RUNNER_TEMP/nx-src/runtime/src" >> "$GITHUB_ENV"
+      - name: Compilar adaptador minimo com interface real e conferir simbolos x86-64
+        run: |
+          set -euo pipefail
+          sdk="$OO_PS4_TOOLCHAIN"
+          clang++-18 --target=x86_64-pc-freebsd12-elf -std=c++20 -O1 -fPIC \
+            -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
+            -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
+            -I"$KAZUMA_PLATFORM_H" \
+            -c tools/etapa38/platform_ps4_core.cpp \
+            -o "$RUNNER_TEMP/kazuma38-platform-ps4.o" \
+            2>&1 | tee relatorios/etapa38/COMPILACAO.txt
+          readelf -h "$RUNNER_TEMP/kazuma38-platform-ps4.o" | tee relatorios/etapa38/ELF.txt
+          llvm-nm-18 -C --defined-only "$RUNNER_TEMP/kazuma38-platform-ps4.o" | tee relatorios/etapa38/DEFINIDOS.txt
+          llvm-nm-18 -C -u "$RUNNER_TEMP/kazuma38-platform-ps4.o" > relatorios/etapa38/DEPENDENCIAS_EXTERNAS.txt || true
+          grep -Eq 'Machine:.*Advanced Micro Devices X86-64' relatorios/etapa38/ELF.txt
+          grep -Fq 'nx::plat::log_line(char const*)' relatorios/etapa38/DEFINIDOS.txt
+          grep -Fq 'nx::plat::monotonic_ns()' relatorios/etapa38/DEFINIDOS.txt
+          grep -Fq 'nx::plat::sleep_ns(' relatorios/etapa38/DEFINIDOS.txt
+          sha256sum "$RUNNER_TEMP/kazuma38-platform-ps4.o" > relatorios/etapa38/SHA256.txt
+          echo 'TRES FUNCOES DE PLATAFORMA compiladas como OBJETO x86-64 PS4; nao significa funcionamento nem resolucao de simbolos do runtime inteiro.' | tee relatorios/etapa38/RESULTADO.txt
+          echo 'Proximo passo: integrar este objeto aos 87 objetos auditados, resolver libc/libc++ e implementar o restante da plataforma.' | tee -a relatorios/etapa38/RESULTADO.txt
+      - name: Publicar relatorios (NAO binario de jogo)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kazuma-etapa38-primeiras-funcoes-platform-ps4-sem-pkg
+          path: relatorios/etapa38/
+          if-no-files-found: warn
+          retention-days: 20

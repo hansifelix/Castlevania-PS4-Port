@@ -1,0 +1,105 @@
+name: 'Kazuma Etapa 34 - codigo REAL NVN x86-64 PS4 (SEM PKG)'
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/kazuma-etapa34-runtime-nvn.yml'
+      - 'tools/etapa34/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compilar-componente-nvn:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Checkout Kazuma
+        uses: actions/checkout@v4
+      - name: Instalar ferramentas do runner
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang-18 llvm-18 lld-18 binutils g++ git curl ca-certificates
+      - name: Obter SDK OpenOrbis fixado com hash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sdk" "$RUNNER_TEMP/download" relatorios/etapa34
+          curl -fLsS --retry 3 --retry-delay 3 \
+            'https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz' \
+            -o "$RUNNER_TEMP/download/openorbis.tar.gz"
+          echo '3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526  '"$RUNNER_TEMP/download/openorbis.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/download/openorbis.tar.gz" -C "$RUNNER_TEMP/sdk"
+          sdk_link="$(find "$RUNNER_TEMP/sdk" -type f -name link.x -print -quit)"
+          test -n "$sdk_link"
+          sdk="$(dirname "$sdk_link")"
+          test -s "$sdk/include/c++/v1/string"
+          test -s "$sdk/lib/crt1.o"
+          echo "OO_PS4_TOOLCHAIN=$sdk" >> "$GITHUB_ENV"
+      - name: Fixar fonte publica do runtime (SEM ARQUIVOS DO JOGO)
+        run: |
+          set -euo pipefail
+          git clone -q --filter=blob:none --sparse https://github.com/SwonDev/cstlvnia-blmont-to-macos.git "$RUNNER_TEMP/nx-src"
+          git -C "$RUNNER_TEMP/nx-src" checkout -q --detach 4043f21bb4f656d34cd17ba070238c7728d00631
+          git -C "$RUNNER_TEMP/nx-src" sparse-checkout set runtime/src/nvn tests
+          src="$RUNNER_TEMP/nx-src"
+          test -s "$src/runtime/src/nvn/nvn_gpu_pick.cpp"
+          test -s "$src/runtime/src/nvn/nvn_gpu_pick.h"
+          test -s "$src/tests/gpu_pick_test.cpp"
+          git -C "$src" show HEAD:LICENSE > relatorios/etapa34/LICENCA_ORIGINAL_MIT.txt
+          echo "KAZUMA_NX_SOURCE=$src" >> "$GITHUB_ENV"
+          echo 'Codigo real de escolha da GPU; nao e o jogo nem o runtime NVN completo.' > relatorios/etapa34/ESCOPO.txt
+          echo 'Upstream: SwonDev/cstlvnia-blmont-to-macos @ 4043f21bb4f656d34cd17ba070238c7728d00631' >> relatorios/etapa34/ESCOPO.txt
+      - name: Executar testes originais do modulo em Linux
+        run: |
+          set -euo pipefail
+          src="$KAZUMA_NX_SOURCE"
+          g++ -std=c++20 -O1 -DNX_GPU_PICK_STANDALONE \
+            -I"$src/runtime/src/nvn" \
+            "$src/runtime/src/nvn/nvn_gpu_pick.cpp" \
+            "$src/tests/gpu_pick_test.cpp" \
+            -o "$RUNNER_TEMP/kazuma34-host" \
+            2>&1 | tee relatorios/etapa34/HOST_BUILD.log
+          "$RUNNER_TEMP/kazuma34-host" 2>&1 | tee relatorios/etapa34/HOST_TEST.log
+          grep -Fq 'gpu_pick_test: all passed' relatorios/etapa34/HOST_TEST.log
+      - name: Compilar codigo REAL do runtime para alvo PS4 x86-64
+        run: |
+          set -euo pipefail
+          src="$KAZUMA_NX_SOURCE"
+          sdk="$OO_PS4_TOOLCHAIN"
+          out="$RUNNER_TEMP/kazuma34-build"
+          mkdir -p "$out"
+          flags=(--target=x86_64-pc-freebsd12-elf -std=c++20 -O1 -fPIC -DNX_GPU_PICK_STANDALONE \
+            -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
+            -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
+            -I"$src/runtime/src/nvn")
+          clang++-18 "${flags[@]}" -c "$src/runtime/src/nvn/nvn_gpu_pick.cpp" -o "$out/nvn_gpu_pick.o" \
+            2>&1 | tee relatorios/etapa34/PS4_COMPILE_MODULE.log
+          clang++-18 "${flags[@]}" -c "$src/tests/gpu_pick_test.cpp" -o "$out/gpu_pick_test.o" \
+            2>&1 | tee relatorios/etapa34/PS4_COMPILE_TEST.log
+          llvm-ar-18 rcs "$out/libkazuma-nvn-gpupick-ps4.a" "$out/nvn_gpu_pick.o"
+          readelf -h "$out/nvn_gpu_pick.o" | tee relatorios/etapa34/PS4_OBJ_HEADER.txt
+          readelf -Ws "$out/nvn_gpu_pick.o" > relatorios/etapa34/PS4_SYMBOLS.txt
+          grep -Eq 'Machine:.*Advanced Micro Devices X86-64' relatorios/etapa34/PS4_OBJ_HEADER.txt
+          cp "$out/libkazuma-nvn-gpupick-ps4.a" relatorios/etapa34/
+          sha256sum "$out/libkazuma-nvn-gpupick-ps4.a" | tee relatorios/etapa34/PS4_SHA256.txt
+      - name: Tentar LINK ELF PS4 (sem instalar nem executar)
+        run: |
+          set -euo pipefail
+          sdk="$OO_PS4_TOOLCHAIN"
+          out="$RUNNER_TEMP/kazuma34-build"
+          ld.lld-18 -m elf_x86_64 -pie --script "$sdk/link.x" --eh-frame-hdr \
+            -L"$sdk/lib" -o "$out/teste_runtime_nvn.elf" "$sdk/lib/crt1.o" \
+            "$out/nvn_gpu_pick.o" "$out/gpu_pick_test.o" -lc -lkernel -lc++ \
+            2>&1 | tee relatorios/etapa34/PS4_LINK.log
+          readelf -h "$out/teste_runtime_nvn.elf" | tee relatorios/etapa34/PS4_ELF_HEADER.txt
+          grep -Eq 'Machine:.*Advanced Micro Devices X86-64' relatorios/etapa34/PS4_ELF_HEADER.txt
+          sha256sum "$out/teste_runtime_nvn.elf" | tee relatorios/etapa34/PS4_ELF_SHA256.txt
+          echo 'SUCESSO: objeto de fonte real e ELF x86-64 alvo PS4 ligados offline.'
+          echo 'NAO PROVA execucao no PS4, NVN completo, shader comercial ou viabilidade de port.'
+      - name: Guardar relatorios SEM PKG
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kazuma-etapa34-codigo-real-runtime-nvn-sem-pkg
+          path: relatorios/etapa34/
+          if-no-files-found: warn
+          retention-days: 20
