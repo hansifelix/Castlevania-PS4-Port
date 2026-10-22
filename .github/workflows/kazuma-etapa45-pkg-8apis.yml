@@ -1,0 +1,97 @@
+name: 'Kazuma Etapa 45 - PKG diagnostico 8 APIs (SEM JOGO)'
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/kazuma-etapa45-pkg-8apis.yml'
+      - 'tools/etapa45/**'
+      - 'docs/KAZUMA_ETAPA45.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build-pkg-diagnostico:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Instalar dependencias do compilador e pkg
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang-18 llvm-18 lld-18 binutils curl ca-certificates git python3 dpkg-dev
+      - name: Configurar Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23.x'
+          cache: false
+      - name: SDK OpenOrbis v0.5.4 hash verificado
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sdk-bundle" "$RUNNER_TEMP/sdk" "$RUNNER_TEMP/kazuma45-bin"
+          curl -fLsS --retry 3 --retry-delay 3 \
+            'https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz' \
+            -o "$RUNNER_TEMP/sdk-bundle/openorbis.tar.gz"
+          echo '3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526  '"$RUNNER_TEMP/sdk-bundle/openorbis.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/sdk-bundle/openorbis.tar.gz" -C "$RUNNER_TEMP/sdk"
+          sdk_link="$(find "$RUNNER_TEMP/sdk" -type f -name link.x -print -quit)"
+          test -n "$sdk_link"
+          echo "OO_PS4_TOOLCHAIN=$(dirname "$sdk_link")" >> "$GITHUB_ENV"
+          ln -s "$(command -v clang++-18)" "$RUNNER_TEMP/kazuma45-bin/clang++"
+          ln -s "$(command -v ld.lld-18)" "$RUNNER_TEMP/kazuma45-bin/ld.lld"
+          echo "$RUNNER_TEMP/kazuma45-bin" >> "$GITHUB_PATH"
+      - name: Obter helpers graficos do OpenOrbis em commit fixado
+        run: |
+          set -euo pipefail
+          git clone --quiet --filter=blob:none --sparse https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain.git "$RUNNER_TEMP/openorbis-source"
+          git -C "$RUNNER_TEMP/openorbis-source" checkout -q --detach 0a1aaf9dd4a92695538bdeb09fb056d06dd11725
+          git -C "$RUNNER_TEMP/openorbis-source" sparse-checkout set samples/_common
+          test -s "$RUNNER_TEMP/openorbis-source/samples/_common/graphics.cpp"
+          echo "KAZUMA_OPENORBIS_SOURCE=$RUNNER_TEMP/openorbis-source" >> "$GITHUB_ENV"
+      - name: Obter conversor create-fself em commit fixado
+        run: |
+          set -euo pipefail
+          git clone --quiet --filter=blob:none https://github.com/OpenOrbis/create-fself.git "$RUNNER_TEMP/create-fself"
+          git -C "$RUNNER_TEMP/create-fself" checkout -q --detach f2da6229684ce320f673c06fceac9c218f621788
+          test -s "$RUNNER_TEMP/create-fself/cmd/create-fself/go-linux.mod"
+          echo "KAZUMA_CREATE_FSELF=$RUNNER_TEMP/create-fself" >> "$GITHUB_ENV"
+      - name: Baixar cabecalho publico nx::plat em commit fixado
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/kazuma-src45"
+          curl -fLsS --retry 3 \
+            'https://raw.githubusercontent.com/SwonDev/cstlvnia-blmont-to-macos/4043f21bb4f656d34cd17ba070238c7728d00631/runtime/src/platform.h' \
+            -o "$RUNNER_TEMP/kazuma-src45/platform.h"
+          grep -q 'namespace nx::plat' "$RUNNER_TEMP/kazuma-src45/platform.h"
+          echo "KAZUMA_SRC45=$RUNNER_TEMP/kazuma-src45" >> "$GITHUB_ENV"
+      - name: Validar codigo e gerar builder da Etapa 45
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/etapa45 -p 'test_*.py' -v
+          python3 tools/etapa45/preparar_build.py "$RUNNER_TEMP/compilar_pkg_45.sh"
+          bash -n "$RUNNER_TEMP/compilar_pkg_45.sh"
+      - name: Compilar e gerar pacote homebrew independente
+        run: |
+          set -euo pipefail
+          bash "$RUNNER_TEMP/compilar_pkg_45.sh" \
+            "$OO_PS4_TOOLCHAIN" "$KAZUMA_OPENORBIS_SOURCE" "$KAZUMA_CREATE_FSELF" 2>&1 | tee etapa45_execucao.txt
+          test -s relatorios/etapa45/resumo.json
+          test -n "$(find release/etapa45 -maxdepth 1 -name '*.pkg' -print -quit)"
+      - name: Publicar relatorios mesmo em erro
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kazuma-etapa45-diagnostico-sem-jogo
+          path: |
+            relatorios/etapa45/
+            etapa45_execucao.txt
+          if-no-files-found: warn
+          retention-days: 20
+      - name: Publicar PKG homebrew so se build passou
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kazuma-etapa45-pkg-teste-8apis-nao-testado
+          path: release/etapa45/*.pkg
+          if-no-files-found: error
+          retention-days: 14
