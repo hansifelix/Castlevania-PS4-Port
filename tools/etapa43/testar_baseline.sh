@@ -10,7 +10,7 @@ sdk="$OO_PS4_TOOLCHAIN"
 rep="relatorios/etapa43"
 mkdir -p "$rep" "$RUNNER_TEMP/kazuma43-bin"
 # Evita afirmar sucesso se o SDK nao tiver os artefatos indispensaveis.
-for f in "$sdk/link.x" "$sdk/lib/crt1.o" "$sdk/lib/libc.a" "$sdk/lib/libkernel.a"; do
+for f in "$sdk/link.x" "$sdk/lib/crt1.o" "$sdk/lib/libc.a" "$sdk/lib/libkernel.so"; do
     test -s "$f" || { echo "ARQUIVO_SDK_AUSENTE=$f" | tee -a "$rep/STATUS.txt"; exit 2; }
 done
 : > "$rep/FERRAMENTAS.txt"
