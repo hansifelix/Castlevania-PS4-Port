@@ -1,0 +1,68 @@
+name: 'Kazuma Etapa 26 - Link Vulkan Mesa PS4 (SEM PKG)'
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/kazuma-etapa26-link-vulkan.yml'
+      - 'tools/etapa26/**'
+      - 'docs/KAZUMA_ETAPA26_LINK_VULKAN.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  link-vulkan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout Kazuma
+        uses: actions/checkout@v4
+      - name: Validacao local rapida
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/etapa26/validar_build.py
+          python3 -m unittest discover -s tools/etapa26/tests -v
+      - name: Preparar diagnosticos e ferramentas de compilacao
+        run: |
+          set -euo pipefail
+          mkdir -p relatorios/etapa26
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends cmake ninja-build glslang-tools file
+      - name: Kit publico em revisao imutavel
+        uses: actions/checkout@v4
+        with:
+          repository: orbis-ports/orbis-porting-kit
+          ref: 213b0c38ff25ea7ca402c8844a6494086d0f1cae
+          path: .orbis/kit
+      - name: Preparar SDK Mesa e overlay verificados (bundle oficial)
+        uses: ./.orbis/kit/.github/actions/setup-orbis
+        with:
+          sdk-bundle: orbis-sdk-v1
+      - name: Verificar dependencias e link de exemplo Vulkan (SEM PS4)
+        run: |
+          set -euo pipefail
+          mkdir -p relatorios/etapa26
+          echo 'Bundle SDK: orbis-sdk-v1' > relatorios/etapa26/COMPONENTES.txt
+          echo 'Kit: 213b0c38ff25ea7ca402c8844a6494086d0f1cae' >> relatorios/etapa26/COMPONENTES.txt
+          for f in "$ORBIS_COMPAT_DIR/build/liborbis-compat.a" \
+                   "$ORBIS_MESA_BUILD/src/amd/vulkan/libvulkan_radeon.a" \
+                   "$ORBIS_KIT_DIR/vkloader/CMakeLists.txt"; do
+            test -s "$f" || { echo "Dependencia ausente: $f" | tee -a relatorios/etapa26/ERRO.txt; exit 1; }
+            ls -lh "$f" | tee -a relatorios/etapa26/COMPONENTES.txt
+          done
+          cmake -S "$ORBIS_KIT_DIR/examples/triangle" -B "$RUNNER_TEMP/kazuma26-build" -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ORBIS_KIT_DIR/cmake/ps4-openorbis.cmake" \
+            -DORBIS_KIT_DIR="$ORBIS_KIT_DIR" \
+            -DORBIS_MESA_SRC="$ORBIS_MESA_SRC" \
+            -DORBIS_MESA_BUILD="$ORBIS_MESA_BUILD" \
+            2>&1 | tee relatorios/etapa26/CONFIG.log
+          cmake --build "$RUNNER_TEMP/kazuma26-build" --parallel 2 \
+            2>&1 | tee relatorios/etapa26/BUILD.log
+          python3 tools/etapa26/validar_build.py --build "$RUNNER_TEMP/kazuma26-build" --out relatorios/etapa26
+          echo 'GATE 26: compilacao e link do exemplo publicos aprovados; nao houve teste no PS4.'
+      - name: Guardar diagnosticos ate em caso de falha
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kazuma-etapa26-link-vulkan-sem-pkg
+          path: relatorios/etapa26/
+          if-no-files-found: warn
+          retention-days: 30
