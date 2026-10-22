@@ -1,0 +1,43 @@
+name: 'Kazuma - Etapa 23: gate do contrato Vulkan (SEM PKG)'
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/kazuma-etapa23-vulkan-contract.yml'
+      - 'tools/etapa23/**'
+      - 'docs/KAZUMA_ETAPA23_GPU_CONTRATO.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  auditar-vulkan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout Kazuma
+        uses: actions/checkout@v4
+      - name: Quatro testes locais
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/etapa23/tests -v
+          python3 -m py_compile tools/etapa23/auditar.py
+      - name: Auditar apenas fontes publicas de revisoes fixas
+        run: |
+          set -euo pipefail
+          python3 tools/etapa23/auditar.py --out relatorios/etapa23
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          x=json.loads(Path('relatorios/etapa23/resultado.json').read_text())
+          assert x['runtime_vulkan']=='1.3'
+          assert 'vkCmdBeginRendering' in x['nao_encontrados_em_exports']
+          assert x['pkg_gerado'] is False and x['console_testado'] is False
+          print('GATE 23: lacuna estatica documentada; jogo/PS4 nao testados')
+          PY
+      - name: Guardar relatorios, inclusive em falha
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kazuma-etapa23-contrato-vulkan
+          path: relatorios/etapa23/
+          if-no-files-found: warn
+          retention-days: 30
