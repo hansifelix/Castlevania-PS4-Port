@@ -55,6 +55,28 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p relatorios/etapa27 pacotes/etapa27
+          # KAZUMA_PRX_V2_PINNED: PRXs de exemplo publico, verificados por SHA-1 do Git.
+          # Fonte: OpenOrbis/OpenOrbis-PS4-Toolchain @ 0a1aaf9dd4a92695538bdeb09fb056d06dd11725
+          # A presenca dos PRXs nao prova carga, execucao ou compatibilidade na GPU.
+          sdkmodules="$OO_PS4_TOOLCHAIN/src/modules"
+          mkdir -p "$sdkmodules" relatorios/etapa27
+          origin='https://raw.githubusercontent.com/OpenOrbis/OpenOrbis-PS4-Toolchain/0a1aaf9dd4a92695538bdeb09fb056d06dd11725/samples/piglet/sce_module'
+          log='relatorios/etapa27/ORIGEM_E_VERIFICACAO_PRX.txt'
+          echo 'Fonte: OpenOrbis/OpenOrbis-PS4-Toolchain 0a1aaf9dd4a92695538bdeb09fb056d06dd11725' > "$log"
+          for entry in 'libc.prx e49b25d011281d52131a34d5a18106dd49605919 3424' 'libSceFios2.prx 1f83bdc8f1fd0ddf6a56f0d5faa1d914e35095fa 3200'; do
+            read -r mod expected size <<< "$entry"
+            f="$sdkmodules/$mod"
+            curl --fail --silent --show-error --location --retry 3 --max-time 120 -o "$f" "$origin/$mod"
+            actual="$(git hash-object "$f")"
+            actual_size="$(stat -c%s "$f")"
+            if [[ "$actual" != "$expected" || "$actual_size" != "$size" ]]; then
+              echo "BLOQUEIO: hash/tamanho inesperado em $mod; nao distribuir o PKG" | tee -a "$log"
+              exit 1
+            fi
+            echo "OK: $mod GitBlob=$actual tamanho=$actual_size" | tee -a "$log"
+            file "$f" | tee -a "$log"
+          done
+          # make-pkg.sh copia automaticamente $OO_PS4_TOOLCHAIN/src/modules/*.prx.
           export ORBIS_WORK="$RUNNER_TEMP/kazuma27-orbis-work"
           bash "$ORBIS_KIT_DIR/scripts/ps4/make-pkg.sh" \
             --eboot "$RUNNER_TEMP/kazuma27-build/eboot.bin" \
