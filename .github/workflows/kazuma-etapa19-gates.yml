@@ -1,0 +1,54 @@
+name: 'Kazuma - Etapa 19: auditar lacunas nx plat e gates (SEM PKG)'
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/kazuma-etapa19-gates.yml'
+      - 'tools/etapa19/**'
+      - 'docs/KAZUMA_ETAPA19_GATES.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  auditar-gates:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - name: Checkout Kazuma
+        uses: actions/checkout@v4
+      - name: Verificar testes locais
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/etapa19/tests -v
+          python3 -m py_compile tools/etapa19/auditar_portabilidade.py
+      - name: Obter cabecalho publico fixado do runtime
+        run: |
+          set -euo pipefail
+          git clone --quiet --filter=blob:none --sparse https://github.com/SwonDev/cstlvnia-blmont-to-macos.git "$RUNNER_TEMP/nx-source"
+          git -C "$RUNNER_TEMP/nx-source" checkout -q --detach 4043f21bb4f656d34cd17ba070238c7728d00631
+          git -C "$RUNNER_TEMP/nx-source" sparse-checkout set runtime/src
+          test -s "$RUNNER_TEMP/nx-source/runtime/src/platform.h"
+      - name: Medir lacunas e produzir relatorios
+        run: |
+          set -euo pipefail
+          python3 tools/etapa19/auditar_portabilidade.py \
+            --header "$RUNNER_TEMP/nx-source/runtime/src/platform.h" \
+            --ps4 tools/etapa17/plat_ps4.cpp --out relatorios/etapa19
+          python3 - <<'PY_CHECK'
+          import json
+          from pathlib import Path
+          x=json.loads(Path('relatorios/etapa19/lacunas.json').read_text())
+          assert x['etapa']==19
+          assert x['total_interfaces_priorizadas'] >= 25
+          assert x['definicoes_ps4_encontradas'] < x['total_interfaces_priorizadas']
+          assert x['go_no_go']=='SEM_DECISAO_DE_VIABILIDADE'
+          assert x['gates_para_port']['menu_original_rodando_no_PS4']=='NAO'
+          print('Auditoria: testes de sintaxe e contratos concluídos; NÃO avalia execução PS4.')
+          PY_CHECK
+      - name: Publicar relatório apenas
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kazuma-etapa19-lacunas-sem-pkg
+          path: relatorios/etapa19/
+          if-no-files-found: warn
+          retention-days: 30
