@@ -20,6 +20,7 @@ jobs:
           set -euo pipefail
           python3 -m py_compile tools/etapa27/verificar_pacote.py
           python3 -m py_compile tools/etapa27/patch_triangle_pause.py
+          python3 -m py_compile tools/etapa27/patch_triangle_gnm_submitdone.py
           python3 -m unittest discover -s tools/etapa27/tests -v
       - name: Instalar dependencias de build no runner
         run: |
@@ -47,6 +48,11 @@ jobs:
           mkdir -p "$test_src"
           cp -a "$ORBIS_KIT_DIR/examples/triangle/." "$test_src/"
           python3 tools/etapa27/patch_triangle_pause.py "$test_src/triangle.c"
+          # KAZUMA_TEST09_GNM_SUBMITDONE: testar a API GNM em copia temporaria.
+          python3 tools/etapa27/patch_triangle_gnm_submitdone.py "$test_src/triangle.c"
+          grep -q KAZUMA_TEST09_GNM_SUBMITDONE "$test_src/triangle.c"
+          # GNM e Vulkan sao APIs distintas; link explicito com libSceGnmDriver.
+          printf "\ntarget_link_libraries(triangle PRIVATE SceGnmDriver)\n" >> "$test_src/CMakeLists.txt"
           grep -q 'KAZUMA_TEST08_MAX_FRAMES = 300UL' "$test_src/triangle.c"
           cmake -S "$test_src" -B "$RUNNER_TEMP/kazuma27-build" -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$ORBIS_KIT_DIR/cmake/ps4-openorbis.cmake" \
@@ -89,9 +95,9 @@ jobs:
             --eboot "$RUNNER_TEMP/kazuma27-build/eboot.bin" \
             --out-dir "$RUNNER_TEMP/kazuma27-pkg" \
             --title-id BREW91240 \
-            --title 'Kazuma GPU Vulkan Test 08 Pausa' \
+            --title 'Kazuma GPU Vulkan Test 09 GNM' \
             --content-label 'KAZUMAVULKANGPU1' \
-            --version 01.01 \
+            --version 01.02 \
             --icon 'tools/etapa12/assets/icon0.png' \
             2>&1 | tee relatorios/etapa27/PKG_BUILD.log
           # Etapa 27 — Klog real do PS4: PRX_SCE_MODULE_LOAD_ERROR / 0xa0020102.
@@ -171,7 +177,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kazuma-test08-pausa-gpu-pkg-nao-testado
+          name: kazuma-test09-gnm-submitdone-pkg-nao-testado
           path: |
             relatorios/etapa27/
             pacotes/etapa27/*.pkg
