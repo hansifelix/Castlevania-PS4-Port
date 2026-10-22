@@ -1,0 +1,48 @@
+name: 'Kazuma - Etapa 24: comparar backends Vulkan (SEM PKG)'
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/kazuma-etapa24-backend-gates.yml'
+      - 'tools/etapa24/**'
+      - 'docs/KAZUMA_ETAPA24_BACKENDS.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  auditar-backends:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Checkout Kazuma
+        uses: actions/checkout@v4
+      - name: Testes de unidade sem dados de jogo
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/etapa24/auditar_backends.py
+          python3 -m unittest discover -s tools/etapa24/tests -v
+      - name: Auditar fontes publicas fixas, sem compilar nem executar no console
+        run: |
+          set -euo pipefail
+          python3 tools/etapa24/auditar_backends.py --out relatorios/etapa24
+          python3 - <<'PY_CHECK'
+          import json
+          from pathlib import Path
+          p=Path('relatorios/etapa24/resultado.json')
+          a=json.loads(p.read_text(encoding='utf-8'))
+          assert a['etapa']==24
+          assert a['runtime_vulkan']=='1.3'
+          assert a['opengnm_header_vulkan']=='1.1.0'
+          assert a['mesa_radv_gfx7_declara_vulkan_1_3']
+          assert a['mesa_wsi_orbis_codigo_videoout_encontrado']
+          assert not a['mesa_testada_no_PS4_do_usuario'] and a['sem_pkg']
+          assert a['port_completo_viavel']=='INDETERMINADO'
+          print('ETAPA 24: evidencia estatica conferida; sem teste de hardware; backend ainda nao validado.')
+          PY_CHECK
+      - name: Publicar relatorios inclusive se auditoria falhar
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kazuma-etapa24-comparacao-de-backends
+          path: relatorios/etapa24/
+          if-no-files-found: warn
+          retention-days: 30
