@@ -1,0 +1,83 @@
+name: 'Kazuma Etapa 27 - GPU REAL preparacao triangulo Vulkan (PKG sem instalacao)'
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/kazuma-etapa27-gpu-triangle.yml'
+      - 'tools/etapa27/**'
+      - 'docs/KAZUMA_ETAPA27_GPU_REAL.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  preparar-teste-gpu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - name: Checkout Kazuma
+        uses: actions/checkout@v4
+      - name: Validar scripts de verificacao
+        run: |
+          set -euo pipefail
+          python3 -m py_compile tools/etapa27/verificar_pacote.py
+          python3 -m unittest discover -s tools/etapa27/tests -v
+      - name: Instalar dependencias de build no runner
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends cmake ninja-build glslang-tools file curl dpkg
+      - name: Checkout kit publico FIXO
+        uses: actions/checkout@v4
+        with:
+          repository: orbis-ports/orbis-porting-kit
+          ref: 213b0c38ff25ea7ca402c8844a6494086d0f1cae
+          path: .orbis/kit
+      - name: Preparar SDK + Mesa RADV emparelhados
+        uses: ./.orbis/kit/.github/actions/setup-orbis
+        with:
+          sdk-bundle: orbis-sdk-v1
+      - name: Gerar exemplo publico de triangulo Vulkan e seu eboot
+        run: |
+          set -euo pipefail
+          mkdir -p relatorios/etapa27
+          echo 'Kit fixo: 213b0c38ff25ea7ca402c8844a6494086d0f1cae' > relatorios/etapa27/FONTES.txt
+          echo 'Bundle: orbis-sdk-v1' >> relatorios/etapa27/FONTES.txt
+          cmake -S "$ORBIS_KIT_DIR/examples/triangle" -B "$RUNNER_TEMP/kazuma27-build" -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$ORBIS_KIT_DIR/cmake/ps4-openorbis.cmake" \
+            -DORBIS_KIT_DIR="$ORBIS_KIT_DIR" \
+            -DORBIS_MESA_SRC="$ORBIS_MESA_SRC" \
+            -DORBIS_MESA_BUILD="$ORBIS_MESA_BUILD" \
+            2>&1 | tee relatorios/etapa27/CONFIG.log
+          cmake --build "$RUNNER_TEMP/kazuma27-build" --parallel 2 \
+            2>&1 | tee relatorios/etapa27/BUILD.log
+          python3 tools/etapa27/verificar_pacote.py \
+            --build "$RUNNER_TEMP/kazuma27-build" --out relatorios/etapa27 --fase eboot
+      - name: Empacotar homebrew independente para PS4 (NAO INSTALAR)
+        run: |
+          set -euo pipefail
+          mkdir -p relatorios/etapa27 pacotes/etapa27
+          export ORBIS_WORK="$RUNNER_TEMP/kazuma27-orbis-work"
+          bash "$ORBIS_KIT_DIR/scripts/ps4/make-pkg.sh" \
+            --eboot "$RUNNER_TEMP/kazuma27-build/eboot.bin" \
+            --out-dir "$RUNNER_TEMP/kazuma27-pkg" \
+            --title-id BREW91240 \
+            --title 'Kazuma GPU Vulkan Test 07' \
+            --content-label 'KAZUMAVULKANGPU1' \
+            --version 01.00 \
+            2>&1 | tee relatorios/etapa27/PKG_BUILD.log
+          python3 tools/etapa27/verificar_pacote.py \
+            --build "$RUNNER_TEMP/kazuma27-build" \
+            --pkg-dir "$RUNNER_TEMP/kazuma27-pkg" \
+            --out relatorios/etapa27 --fase pkg
+          cp "$RUNNER_TEMP/kazuma27-pkg/IV0000-BREW91240_00-KAZUMAVULKANGPU1.pkg" pacotes/etapa27/
+          sha256sum pacotes/etapa27/*.pkg | tee relatorios/etapa27/PKG_SHA256.txt
+          echo 'CI concluiu preparo do teste Vulkan; execucao na GPU PS4 NAO realizada.'
+      - name: Guardar diagnosticos e PKG experimental sem instalar
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kazuma-test07-gpu-vulkan-pkg-nao-testado
+          path: |
+            relatorios/etapa27/
+            pacotes/etapa27/*.pkg
+          if-no-files-found: warn
+          retention-days: 15
