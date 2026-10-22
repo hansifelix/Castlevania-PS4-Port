@@ -1,0 +1,64 @@
+name: 'Kazuma - Etapa 22: dependencias NVN/Vulkan e OpenOrbis (SEM PKG)'
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/kazuma-etapa22-gpu-gates.yml'
+      - 'tools/etapa22/**'
+      - 'docs/KAZUMA_ETAPA22_GPU_GATES.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  auditar-gpu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Checkout Kazuma
+        uses: actions/checkout@v4
+      - name: Verificar testes de unidade e sintaxe
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/etapa22/tests -v
+          python3 -m py_compile tools/etapa22/auditar_gpu.py
+      - name: Clonar apenas codigo NVN publico da revisao fixa
+        run: |
+          set -euo pipefail
+          git clone --quiet --filter=blob:none --sparse https://github.com/SwonDev/cstlvnia-blmont-to-macos.git "$RUNNER_TEMP/nx-src"
+          git -C "$RUNNER_TEMP/nx-src" checkout -q --detach 4043f21bb4f656d34cd17ba070238c7728d00631
+          git -C "$RUNNER_TEMP/nx-src" sparse-checkout set runtime/src/nvn
+          test -s "$RUNNER_TEMP/nx-src/runtime/src/nvn/nvn_vk.cpp"
+      - name: Obter OpenOrbis SDK imutavel por SHA256 para inventario de headers
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sdk-bundle" "$RUNNER_TEMP/sdk"
+          curl --fail --location --retry 3 --retry-delay 3 \
+            'https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz' \
+            -o "$RUNNER_TEMP/sdk-bundle/openorbis.tar.gz"
+          echo '3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526  '"$RUNNER_TEMP/sdk-bundle/openorbis.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/sdk-bundle/openorbis.tar.gz" -C "$RUNNER_TEMP/sdk"
+          sdk_link="$(find "$RUNNER_TEMP/sdk" -type f -name link.x -print -quit)"
+          test -n "$sdk_link"
+          echo "OO_PS4_TOOLCHAIN=$(dirname "$sdk_link")" >> "$GITHUB_ENV"
+      - name: Emitir relatorio de dependencias (nao compila jogo)
+        run: |
+          set -euo pipefail
+          python3 tools/etapa22/auditar_gpu.py \
+            --nvn "$RUNNER_TEMP/nx-src/runtime/src/nvn" \
+            --sdk "$OO_PS4_TOOLCHAIN" --out relatorios/etapa22
+          python3 - <<'PY_CHECK'
+          import json
+          from pathlib import Path
+          x=json.loads(Path('relatorios/etapa22/gpu_dependencias.json').read_text())
+          assert x['etapa']==22 and x['vulkan_nomes_distintos_achados'] >= 8
+          assert x['go_no_go']=='INDETERMINADO'
+          assert not x['motor_castlevania_testado']
+          print('GATE GPU 22: auditoria estatica OK; PS4/GPU nao testados; sem PKG.')
+          PY_CHECK
+      - name: Publicar relatorios (ate se houver erro)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kazuma-etapa22-gpu-analise-sem-pkg
+          path: relatorios/etapa22/
+          if-no-files-found: warn
+          retention-days: 30
