@@ -44,8 +44,9 @@ jobs:
 
           git clone -q --filter=blob:none --sparse https://github.com/KhronosGroup/Vulkan-Headers.git "$RUNNER_TEMP/vkh"
           git -C "$RUNNER_TEMP/vkh" checkout -q --detach acbb9391c0a597272800cd3f4363661c00a27c77
-          git -C "$RUNNER_TEMP/vkh" sparse-checkout set include/vulkan
+          git -C "$RUNNER_TEMP/vkh" sparse-checkout set include/vulkan include/vk_video
           test -s "$RUNNER_TEMP/vkh/include/vulkan/vulkan.h"
+          test -s "$RUNNER_TEMP/vkh/include/vk_video/vulkan_video_codec_h264std.h"
           echo "KAZUMA_VK_HEADERS=$RUNNER_TEMP/vkh/include" >> "$GITHUB_ENV"
           printf '%s\n' \
             'SwonDev runtime 4043f21bb4f656d34cd17ba070238c7728d00631 (MIT)' \
