@@ -19,6 +19,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m py_compile tools/etapa27/verificar_pacote.py
+          python3 -m py_compile tools/etapa27/patch_triangle_pause.py
           python3 -m unittest discover -s tools/etapa27/tests -v
       - name: Instalar dependencias de build no runner
         run: |
@@ -41,7 +42,13 @@ jobs:
           mkdir -p relatorios/etapa27
           echo 'Kit fixo: 213b0c38ff25ea7ca402c8844a6494086d0f1cae' > relatorios/etapa27/FONTES.txt
           echo 'Bundle: orbis-sdk-v1' >> relatorios/etapa27/FONTES.txt
-          cmake -S "$ORBIS_KIT_DIR/examples/triangle" -B "$RUNNER_TEMP/kazuma27-build" -G Ninja \
+          # KAZUMA_TEST08_SRC_PAUSA: preservar fonte upstream e adaptar copia temporaria.
+          test_src="$RUNNER_TEMP/kazuma28-src"
+          mkdir -p "$test_src"
+          cp -a "$ORBIS_KIT_DIR/examples/triangle/." "$test_src/"
+          python3 tools/etapa27/patch_triangle_pause.py "$test_src/triangle.c"
+          grep -q 'KAZUMA_TEST08_MAX_FRAMES = 300UL' "$test_src/triangle.c"
+          cmake -S "$test_src" -B "$RUNNER_TEMP/kazuma27-build" -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$ORBIS_KIT_DIR/cmake/ps4-openorbis.cmake" \
             -DORBIS_KIT_DIR="$ORBIS_KIT_DIR" \
             -DORBIS_MESA_SRC="$ORBIS_MESA_SRC" \
@@ -82,9 +89,9 @@ jobs:
             --eboot "$RUNNER_TEMP/kazuma27-build/eboot.bin" \
             --out-dir "$RUNNER_TEMP/kazuma27-pkg" \
             --title-id BREW91240 \
-            --title 'Kazuma GPU Vulkan Test 07' \
+            --title 'Kazuma GPU Vulkan Test 08 Pausa' \
             --content-label 'KAZUMAVULKANGPU1' \
-            --version 01.00 \
+            --version 01.01 \
             --icon 'tools/etapa12/assets/icon0.png' \
             2>&1 | tee relatorios/etapa27/PKG_BUILD.log
           # Etapa 27 — Klog real do PS4: PRX_SCE_MODULE_LOAD_ERROR / 0xa0020102.
@@ -164,7 +171,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: kazuma-test07-gpu-vulkan-pkg-nao-testado
+          name: kazuma-test08-pausa-gpu-pkg-nao-testado
           path: |
             relatorios/etapa27/
             pacotes/etapa27/*.pkg
