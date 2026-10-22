@@ -64,6 +64,54 @@ jobs:
             --content-label 'KAZUMAVULKANGPU1' \
             --version 01.00 \
             2>&1 | tee relatorios/etapa27/PKG_BUILD.log
+          # Etapa 27 — Klog real do PS4: PRX_SCE_MODULE_LOAD_ERROR / 0xa0020102.
+          # Este teste identifica modulos ausentes no pacote ANTES de qualquer distribuicao.
+          stage="$RUNNER_TEMP/kazuma27-pkg/pkg-stage"
+          report="relatorios/etapa27/DIAGNOSTICO_PRX_KLOG.txt"
+          {
+            echo 'Kazuma Test 07 — auditoria PRX apos erro observado no hardware'
+            echo 'Klog: Lack of a .prx file in /app0/sce_module; codigo 0xa0020102'
+            echo 'A mensagem nao diz QUAL modulo especifico esta faltando.'
+            echo "stage=$stage"
+            echo '--- Conteudo do sce_module (stage) ---'
+            if [[ -d "$stage/sce_module" ]]; then
+              find "$stage/sce_module" -maxdepth 1 -type f -printf '%f | %s bytes\n' | sort
+            else
+              echo 'DIRETORIO sce_module AUSENTE'
+            fi
+            echo '--- Localizacoes candidatas no SDK ---'
+            for sdkdir in "${OO_PS4_TOOLCHAIN:-}/src/modules" "${OO_PS4_TOOLCHAIN:-}/bin/data/modules"; do
+              echo "Diretorio: $sdkdir"
+              if [[ -d "$sdkdir" ]]; then
+                find "$sdkdir" -maxdepth 2 -type f \( -name '*.prx' -o -name '*.sprx' \) -printf '%P | %s bytes\n' | sort
+              else
+                echo 'Nao encontrado'
+              fi
+            done
+            echo '--- Icone (aviso independente do erro PRX) ---'
+            if [[ -s "$stage/sce_sys/icon0.png" ]]; then echo 'icon0.png presente'; else echo 'icon0.png ausente'; fi
+          } > "$report"
+          falhou=0
+          for mod in libc.prx libSceFios2.prx; do
+            f="$stage/sce_module/$mod"
+            if [[ ! -s "$f" ]]; then
+              echo "BLOQUEIO: $mod nao encontrado no pacote" | tee -a "$report"
+              falhou=1
+            elif ! grep -Fq "sce_module/$mod" "$stage/pkg.gp4"; then
+              echo "BLOQUEIO: $mod nao registrado no pkg.gp4" | tee -a "$report"
+              falhou=1
+            else
+              echo "PRESENTE: $mod (nao prova que sera carregado pelo PS4)" | tee -a "$report"
+              sha256sum "$f" | tee -a "$report"
+            fi
+          done
+          if [[ "$falhou" != 0 ]]; then
+            cat "$report"
+            echo 'ERRO: nao publicar novo PKG; investigar os modulos PRX faltantes.'
+            exit 1
+          fi
+          cat "$report"
+          echo 'Gate PRX basico aprovado; causa exata do crash ainda precisa ser reavaliada.'
           python3 tools/etapa27/verificar_pacote.py \
             --build "$RUNNER_TEMP/kazuma27-build" \
             --pkg-dir "$RUNNER_TEMP/kazuma27-pkg" \
