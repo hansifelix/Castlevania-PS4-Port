@@ -25,9 +25,19 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y -qq clang-18 llvm-18 llvm-18-tools lld-18 xz-utils
+          # LLVM 18 tem comandos versionados (llvm-ar-18 etc) no runner Ubuntu.
+          # Criar aliases em pasta TEMPORARIA, sem alterar binarios do sistema.
+          mkdir -p "$RUNNER_TEMP/llvm18-bin" relatorios/etapa25
           for tool in clang clang++ llvm-ar llvm-nm llvm-objcopy llvm-objdump llvm-readelf; do
-            command -v "$tool" || exit 1
+            candidate="/usr/bin/${tool}-18"
+            if [[ ! -x "$candidate" ]]; then
+              echo "FERRAMENTA AUSENTE: $candidate" | tee -a relatorios/etapa25/FERRAMENTAS.log
+              exit 1
+            fi
+            ln -sf "$candidate" "$RUNNER_TEMP/llvm18-bin/$tool"
+            "$candidate" --version | head -n 1 | tee -a relatorios/etapa25/FERRAMENTAS.log
           done
+          echo "$RUNNER_TEMP/llvm18-bin" >> "$GITHUB_PATH"
       - name: SDK OpenOrbis v0.5.4 verificado por SHA256
         run: |
           set -euo pipefail
