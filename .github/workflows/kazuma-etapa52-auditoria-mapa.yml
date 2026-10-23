@@ -1,0 +1,35 @@
+name: 'Kazuma Etapa 52 - auditar mapa de modulos (sem PKG)'
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/kazuma-etapa52-auditoria-mapa.yml'
+      - 'tools/etapa52/**'
+      - 'docs/KAZUMA_ETAPA52.md'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  plano-estatico:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Testes de consistencia
+        run: python3 -m unittest discover -s tools/etapa52 -p 'test_*.py' -v
+      - name: Validar manifesto publico fixado (sem dados do jogo)
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 'https://raw.githubusercontent.com/SwonDev/cstlvnia-blmont-to-macos/4043f21bb4f656d34cd17ba070238c7728d00631/games/castlevania/build.json' -o /tmp/upstream-build52.json
+          curl -fsSL --retry 3 'https://raw.githubusercontent.com/SwonDev/cstlvnia-blmont-to-macos/4043f21bb4f656d34cd17ba070238c7728d00631/runtime/include/nx/runtime.h' -o /tmp/upstream-runtime52.h
+          python3 tools/etapa52/analisar_mapa.py --manifest tools/etapa52/build_publico_1_1_0.json --comparar-upstream /tmp/upstream-build52.json --comparar-runtime /tmp/upstream-runtime52.h --saida relatorios/etapa52
+          test -s relatorios/etapa52/MAPA_MEMORIA.json
+          test -s relatorios/etapa52/LEIA_PRIMEIRO.md
+          cat relatorios/etapa52/LEIA_PRIMEIRO.md
+      - name: Publicar relatorios (SEM PKG)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kazuma-etapa52-mapa-publico-sem-jogo
+          path: relatorios/etapa52/
+          if-no-files-found: warn
+          retention-days: 20
