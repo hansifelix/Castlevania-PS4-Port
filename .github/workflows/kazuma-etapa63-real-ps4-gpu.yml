@@ -1,0 +1,77 @@
+name: 'Kazuma Etapa 63 - GPU PS4 + RADV real (sem jogo)'
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/kazuma-etapa63-real-ps4-gpu.yml'
+      - 'tools/etapa63/**'
+      - 'tools/etapa62/ps4_vulkan_bridge.cpp'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ps4-radv:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends cmake ninja-build clang lld llvm binutils curl ca-certificates
+          echo 'KAZUMA63: verificando ferramentas do GitHub runner'
+          for tool in cmake ninja clang clang++ ld.lld llvm-ar llvm-ranlib llvm-nm; do
+            command -v "$tool" || { echo "KAZUMA63: ferramenta ausente: $tool" >&2; exit 1; }
+          done
+      - name: Fetch paired PS4 OpenOrbis/Mesa RADV bundle and verify SHA256
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sdk"
+          curl -fLsS --retry 3 --retry-delay 4 \
+            'https://github.com/orbis-ports/orbis-porting-kit/releases/download/orbis-sdk-v1/orbis-sdk-v1.tar.gz' \
+            -o "$RUNNER_TEMP/orbis-sdk-v1.tar.gz"
+          echo "f4f079a4df334b46a76996f895283904283d6a006f97102aafaa53d4ecfc9622  $RUNNER_TEMP/orbis-sdk-v1.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/orbis-sdk-v1.tar.gz" -C "$RUNNER_TEMP/sdk"
+          test -f "$RUNNER_TEMP/sdk/orbis-sdk-v1/toolchain/orbis-sdk.cmake"
+          test -f "$RUNNER_TEMP/sdk/orbis-sdk-v1/mesa/build-orbis/src/amd/vulkan/libvulkan_radeon.a"
+          test -f "$RUNNER_TEMP/sdk/orbis-sdk-v1/orbis-compat/vkloader/CMakeLists.txt"
+          echo "KAZUMA63_BUNDLE=$RUNNER_TEMP/sdk/orbis-sdk-v1" >> "$GITHUB_ENV"
+      - name: Configure with real Mesa RADV and build PS4 EBOOT
+        run: |
+          set -euo pipefail
+          mkdir -p relatorios/etapa63
+          cmake -S tools/etapa63 -B "$RUNNER_TEMP/kazuma63-build" -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$KAZUMA63_BUNDLE/toolchain/orbis-sdk.cmake" \
+            -DCMAKE_AR="$(command -v llvm-ar)" \
+            -DCMAKE_RANLIB="$(command -v llvm-ranlib)" \
+            -DCMAKE_MAKE_PROGRAM="$(command -v ninja)" \
+            > relatorios/etapa63/CONFIGURAR.log 2>&1 || { tail -n 100 relatorios/etapa63/CONFIGURAR.log; exit 1; }
+          cmake --build "$RUNNER_TEMP/kazuma63-build" \
+            > relatorios/etapa63/COMPILAR.log 2>&1 || { tail -n 100 relatorios/etapa63/COMPILAR.log; exit 1; }
+          eboot="$(find "$RUNNER_TEMP/kazuma63-build" -name eboot.bin -type f -print -quit)"
+          test -n "$eboot" && test -s "$eboot" || { echo 'KAZUMA63: FALHA - nao foi criado eboot.bin'; exit 1; }
+          cp "$eboot" relatorios/etapa63/eboot.bin
+          sha256sum relatorios/etapa63/eboot.bin | tee relatorios/etapa63/SHA256_EBOOT.txt
+          echo 'KAZUMA63: EBOOT_REAL_COM_MESA_RADV=CONSTRUIDO (NAO TESTADO NO PS4)' | tee relatorios/etapa63/RESULTADO.txt
+      - name: Package standalone GPU diagnostic only
+        run: |
+          set -euo pipefail
+          . "$KAZUMA63_BUNDLE/env.sh"
+          test -f "$KAZUMA63_BUNDLE/orbis-compat/scripts/ps4/make-pkg.sh" || { echo "KAZUMA63: empacotador ausente no bundle"; exit 1; }
+          "$KAZUMA63_BUNDLE/orbis-compat/scripts/ps4/make-pkg.sh" \
+            --eboot "$GITHUB_WORKSPACE/relatorios/etapa63/eboot.bin" \
+            --out-dir "$GITHUB_WORKSPACE/relatorios/etapa63/pkg" \
+            --title-id BREW91263 \
+            --title 'Kazuma GPU Bridge Test 63' \
+            > relatorios/etapa63/EMPACOTAR.log 2>&1 || { tail -n 100 relatorios/etapa63/EMPACOTAR.log; exit 1; }
+          pkg="$(find relatorios/etapa63/pkg -name '*.pkg' -type f -print -quit)"
+          test -n "$pkg" && test -s "$pkg" || { echo 'KAZUMA63: PKG ausente'; exit 1; }
+          sha256sum "$pkg" | tee relatorios/etapa63/SHA256_PKG.txt
+          echo 'KAZUMA63: PKG_DIAGNOSTICO_CONSTRUIDO=OK (NAO EXECUTADO NO HARDWARE)' | tee -a relatorios/etapa63/RESULTADO.txt
+      - name: Save build reports and optional test package
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kazuma63-gpu-real-ps4-diagnostico-sem-jogo
+          path: relatorios/etapa63/
+          retention-days: 14
