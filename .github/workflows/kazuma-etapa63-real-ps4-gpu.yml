@@ -18,7 +18,11 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends cmake ninja-build clang lld binutils curl ca-certificates
+          sudo apt-get install -y --no-install-recommends cmake ninja-build clang lld llvm binutils curl ca-certificates
+          echo 'KAZUMA63: verificando ferramentas do GitHub runner'
+          for tool in cmake ninja clang clang++ ld.lld llvm-ar llvm-ranlib llvm-nm; do
+            command -v "$tool" || { echo "KAZUMA63: ferramenta ausente: $tool" >&2; exit 1; }
+          done
       - name: Fetch paired PS4 OpenOrbis/Mesa RADV bundle and verify SHA256
         run: |
           set -euo pipefail
@@ -38,6 +42,9 @@ jobs:
           mkdir -p relatorios/etapa63
           cmake -S tools/etapa63 -B "$RUNNER_TEMP/kazuma63-build" -G Ninja \
             -DCMAKE_TOOLCHAIN_FILE="$KAZUMA63_BUNDLE/toolchain/orbis-sdk.cmake" \
+            -DCMAKE_AR="$(command -v llvm-ar)" \
+            -DCMAKE_RANLIB="$(command -v llvm-ranlib)" \
+            -DCMAKE_MAKE_PROGRAM="$(command -v ninja)" \
             > relatorios/etapa63/CONFIGURAR.log 2>&1 || { tail -n 100 relatorios/etapa63/CONFIGURAR.log; exit 1; }
           cmake --build "$RUNNER_TEMP/kazuma63-build" \
             > relatorios/etapa63/COMPILAR.log 2>&1 || { tail -n 100 relatorios/etapa63/COMPILAR.log; exit 1; }
