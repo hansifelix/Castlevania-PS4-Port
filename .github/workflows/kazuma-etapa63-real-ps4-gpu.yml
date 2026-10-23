@@ -58,11 +58,26 @@ jobs:
           set -euo pipefail
           . "$KAZUMA63_BUNDLE/env.sh"
           test -f "$KAZUMA63_BUNDLE/orbis-compat/scripts/ps4/make-pkg.sh" || { echo "KAZUMA63: empacotador ausente no bundle"; exit 1; }
+          # OpenOrbis SDK bundle deliberately omits src/modules; without these
+          # public empty-stub PRXs the PS4 loader fails before main() with
+          # PRX_SCE_MODULE_LOAD_ERROR. Fetch from a pinned OpenOrbis revision.
+          prx_dir="$OO_PS4_TOOLCHAIN/src/modules"
+          mkdir -p "$prx_dir"
+          upstream='0a1aaf9dd4a92695538bdeb09fb056d06dd11725'
+          base="https://raw.githubusercontent.com/OpenOrbis/OpenOrbis-PS4-Toolchain/$upstream/samples/piglet/sce_module"
+          curl -fLsS --retry 3 "$base/libSceFios2.prx" -o "$prx_dir/libSceFios2.prx"
+          curl -fLsS --retry 3 "$base/libc.prx" -o "$prx_dir/libc.prx"
+          test "$(git hash-object "$prx_dir/libSceFios2.prx")" = '1f83bdc8f1fd0ddf6a56f0d5faa1d914e35095fa' || { echo 'KAZUMA63: FIOS2_PRX_HASH_INVALIDO'; exit 1; }
+          test "$(git hash-object "$prx_dir/libc.prx")" = 'e49b25d011281d52131a34d5a18106dd49605919' || { echo 'KAZUMA63: LIBC_PRX_HASH_INVALIDO'; exit 1; }
+          echo 'KAZUMA63: PRX_STUBS=VERIFICADOS; empacotador incluira sce_module/*.prx'
+          # Icon already tracked by this repository (test identity only).
+          test -s "$GITHUB_WORKSPACE/tools/etapa12/assets/icon0.png" || { echo 'KAZUMA63: ICON0_PNG_AUSENTE'; exit 1; }
           "$KAZUMA63_BUNDLE/orbis-compat/scripts/ps4/make-pkg.sh" \
             --eboot "$GITHUB_WORKSPACE/relatorios/etapa63/eboot.bin" \
             --out-dir "$GITHUB_WORKSPACE/relatorios/etapa63/pkg" \
             --title-id BREW91263 \
             --title 'Kazuma GPU Bridge Test 63' \
+            --icon "$GITHUB_WORKSPACE/tools/etapa12/assets/icon0.png" \
             > relatorios/etapa63/EMPACOTAR.log 2>&1 || { tail -n 100 relatorios/etapa63/EMPACOTAR.log; exit 1; }
           pkg="$(find relatorios/etapa63/pkg -name '*.pkg' -type f -print -quit)"
           test -n "$pkg" && test -s "$pkg" || { echo 'KAZUMA63: PKG ausente'; exit 1; }
