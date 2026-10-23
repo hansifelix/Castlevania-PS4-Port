@@ -57,7 +57,8 @@ jobs:
         run: |
           set -euo pipefail
           . "$KAZUMA63_BUNDLE/env.sh"
-          "$ORBIS_KIT_DIR/scripts/ps4/make-pkg.sh" \
+          test -f "$KAZUMA63_BUNDLE/orbis-compat/scripts/ps4/make-pkg.sh" || { echo "KAZUMA63: empacotador ausente no bundle"; exit 1; }
+          "$KAZUMA63_BUNDLE/orbis-compat/scripts/ps4/make-pkg.sh" \
             --eboot "$GITHUB_WORKSPACE/relatorios/etapa63/eboot.bin" \
             --out-dir "$GITHUB_WORKSPACE/relatorios/etapa63/pkg" \
             --title-id BREW91263 \
