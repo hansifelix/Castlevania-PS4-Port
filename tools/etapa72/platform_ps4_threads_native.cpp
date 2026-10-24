@@ -7,7 +7,7 @@
 #include <limits>
 #include <new>
 
-#if defined(__FreeBSD__) || defined(KAZUMA_MOCK_PS4)
+#if defined(KAZUMA_PS4_NATIVE) || defined(KAZUMA_MOCK_PS4)
 #include <orbis/libkernel.h>
 #else
 #include <pthread.h>
@@ -45,7 +45,7 @@ void start_thread(ThreadFn fn, void* arg, size_t stack_size) {
     if (!fn) std::abort();
     auto* context = new (std::nothrow) StartContext{fn, arg};
     if (!context) std::abort();
-#if defined(__FreeBSD__) || defined(KAZUMA_MOCK_PS4)
+#if defined(KAZUMA_PS4_NATIVE) || defined(KAZUMA_MOCK_PS4)
     OrbisPthreadAttr attr{};
     if (scePthreadAttrInit(&attr) != 0) std::abort();
     if (stack_size != 0) {
@@ -75,7 +75,7 @@ void start_thread(ThreadFn fn, void* arg, size_t stack_size) {
 }
 
 [[noreturn]] void exit_thread() {
-#if defined(__FreeBSD__) || defined(KAZUMA_MOCK_PS4)
+#if defined(KAZUMA_PS4_NATIVE) || defined(KAZUMA_MOCK_PS4)
     scePthreadExit(nullptr);
 #else
     pthread_exit(nullptr);
@@ -84,7 +84,7 @@ void start_thread(ThreadFn fn, void* arg, size_t stack_size) {
 }
 
 void yield() {
-#if defined(__FreeBSD__) || defined(KAZUMA_MOCK_PS4)
+#if defined(KAZUMA_PS4_NATIVE) || defined(KAZUMA_MOCK_PS4)
     scePthreadYield();
 #else
     sched_yield();
@@ -92,7 +92,7 @@ void yield() {
 }
 
 int64_t current_thread_id() {
-#if defined(__FreeBSD__) || defined(KAZUMA_MOCK_PS4)
+#if defined(KAZUMA_PS4_NATIVE) || defined(KAZUMA_MOCK_PS4)
     return static_cast<int64_t>(scePthreadGetthreadid());
 #else
     // Identificador POSIX suficiente para teste de unicidade em Linux.
@@ -107,7 +107,7 @@ int64_t current_thread_id() {
 
 void set_thread_name(const char* name) {
     if (!name || !*name) return;
-#if defined(__FreeBSD__) || defined(KAZUMA_MOCK_PS4)
+#if defined(KAZUMA_PS4_NATIVE) || defined(KAZUMA_MOCK_PS4)
     // Não reivindicamos sucesso se a API do libkernel devolver erro.
     if (scePthreadRename(scePthreadSelf(), name) != 0) std::abort();
 #else

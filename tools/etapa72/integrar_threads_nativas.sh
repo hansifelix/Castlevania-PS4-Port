@@ -13,7 +13,7 @@ test -s "$out/kazuma50_boot_partial.o" || { echo 'Falta baseline da Etapa 50' >&
 
 printf '[72/1] Compilar backend scePthread PS4 via OpenOrbis.\n'
 clang++-18 --target=x86_64-pc-freebsd12-elf -std=c++20 -O1 -fPIC \
-  -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
+  -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -DKAZUMA_PS4_NATIVE \
   -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
   -I"$sdk/include" -I"$KAZUMA_NX_SOURCE/runtime/src" \
   -c tools/etapa72/platform_ps4_threads_native.cpp \
