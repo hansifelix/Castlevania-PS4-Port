@@ -1,0 +1,83 @@
+name: 'Kazuma Etapa 67 - triangulo continuo com SubmitDone pela WSI (sem jogo)'
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/kazuma-etapa67-gnm-submitdone.yml'
+      - 'tools/etapa67/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ps4-triangulo:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar clang, ninja e compilador SPIR-V
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends cmake ninja-build clang lld llvm glslang-tools binutils curl ca-certificates
+          for cmd in cmake ninja clang clang++ ld.lld llvm-ar llvm-ranlib glslangValidator; do command -v "$cmd"; done
+      - name: Obter SDK/Mesa RADV da etapa 63 (SHA256 verificado)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sdk"
+          curl -fLsS --retry 3 --retry-delay 4 \
+            'https://github.com/orbis-ports/orbis-porting-kit/releases/download/orbis-sdk-v1/orbis-sdk-v1.tar.gz' \
+            -o "$RUNNER_TEMP/orbis-sdk-v1.tar.gz"
+          echo "f4f079a4df334b46a76996f895283904283d6a006f97102aafaa53d4ecfc9622  $RUNNER_TEMP/orbis-sdk-v1.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/orbis-sdk-v1.tar.gz" -C "$RUNNER_TEMP/sdk"
+          export KAZUMA67_BUNDLE="$RUNNER_TEMP/sdk/orbis-sdk-v1"
+          test -f "$KAZUMA67_BUNDLE/toolchain/orbis-sdk.cmake"
+          test -f "$KAZUMA67_BUNDLE/orbis-compat/vkloader/CMakeLists.txt"
+          test -f "$KAZUMA67_BUNDLE/mesa/build-orbis/src/amd/vulkan/libvulkan_radeon.a"
+          echo "KAZUMA67_BUNDLE=$KAZUMA67_BUNDLE" >> "$GITHUB_ENV"
+      - name: Compilar EBOOT com apresentacao continua e GNM por frame
+        run: |
+          set -euo pipefail
+          mkdir -p relatorios/etapa67
+          cmake -S tools/etapa67 -B "$RUNNER_TEMP/kazuma67-build" -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE="$KAZUMA67_BUNDLE/toolchain/orbis-sdk.cmake" \
+            -DCMAKE_AR="$(command -v llvm-ar)" \
+            -DCMAKE_RANLIB="$(command -v llvm-ranlib)" \
+            -DCMAKE_MAKE_PROGRAM="$(command -v ninja)" \
+            > relatorios/etapa67/CONFIGURAR.log 2>&1 || { tail -n 90 relatorios/etapa67/CONFIGURAR.log; exit 1; }
+          cmake --build "$RUNNER_TEMP/kazuma67-build" \
+            > relatorios/etapa67/COMPILAR.log 2>&1 || { tail -n 90 relatorios/etapa67/COMPILAR.log; exit 1; }
+          eboot="$(find "$RUNNER_TEMP/kazuma67-build" -type f -name eboot.bin -print -quit)"
+          test -n "$eboot" && test -s "$eboot" || { echo 'KAZUMA67: EBOOT_AUSENTE' >&2; exit 1; }
+          cp "$eboot" relatorios/etapa67/eboot.bin
+          sha256sum relatorios/etapa67/eboot.bin > relatorios/etapa67/SHA256_EBOOT.txt
+          echo 'KAZUMA67: EBOOT_CONSTRUIDO; SEM TESTE DE VIDEO REAL NO CI' | tee relatorios/etapa67/RESULTADO.txt
+      - name: Empacotar aplicativo de teste com PRXs e icone
+        run: |
+          set -euo pipefail
+          . "$KAZUMA67_BUNDLE/env.sh"
+          prx_dir="$OO_PS4_TOOLCHAIN/src/modules"
+          mkdir -p "$prx_dir"
+          upstream='0a1aaf9dd4a92695538bdeb09fb056d06dd11725'
+          base="https://raw.githubusercontent.com/OpenOrbis/OpenOrbis-PS4-Toolchain/$upstream/samples/piglet/sce_module"
+          curl -fLsS --retry 3 "$base/libSceFios2.prx" -o "$prx_dir/libSceFios2.prx"
+          curl -fLsS --retry 3 "$base/libc.prx" -o "$prx_dir/libc.prx"
+          test "$(git hash-object "$prx_dir/libSceFios2.prx")" = '1f83bdc8f1fd0ddf6a56f0d5faa1d914e35095fa'
+          test "$(git hash-object "$prx_dir/libc.prx")" = 'e49b25d011281d52131a34d5a18106dd49605919'
+          test -s "$GITHUB_WORKSPACE/tools/etapa12/assets/icon0.png"
+          "$KAZUMA67_BUNDLE/orbis-compat/scripts/ps4/make-pkg.sh" \
+            --eboot "$GITHUB_WORKSPACE/relatorios/etapa67/eboot.bin" \
+            --out-dir "$GITHUB_WORKSPACE/relatorios/etapa67/pkg" \
+            --title-id BREW91267 \
+            --title 'Kazuma Triangulo Vulkan 67' \
+            --icon "$GITHUB_WORKSPACE/tools/etapa12/assets/icon0.png" \
+            > relatorios/etapa67/EMPACOTAR.log 2>&1 || { tail -n 90 relatorios/etapa67/EMPACOTAR.log; exit 1; }
+          pkg="$(find relatorios/etapa67/pkg -type f -name '*.pkg' -print -quit)"
+          test -n "$pkg" && test -s "$pkg" || { echo 'KAZUMA67: PKG_AUSENTE' >&2; exit 1; }
+          sha256sum "$pkg" > relatorios/etapa67/SHA256_PKG.txt
+          echo 'KAZUMA67: PKG_CONSTRUIDO; FECHAMENTO NO PS4 REAL AINDA PRECISA SER TESTADO' | tee -a relatorios/etapa67/RESULTADO.txt
+      - name: Salvar PKG experimental e relatorios
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kazuma67-triangulo-vulkan-ps4-sem-jogo
+          path: relatorios/etapa67/
+          retention-days: 14
