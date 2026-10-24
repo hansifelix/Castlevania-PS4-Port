@@ -38,7 +38,18 @@ void start_thread(ThreadFn fn, void* arg, size_t stack_size) {
         long raw_page = sysconf(_SC_PAGESIZE);
         if (raw_page <= 0) std::abort();
         size_t page = static_cast<size_t>(raw_page);
-        size_t min_stack = static_cast<size_t>(PTHREAD_STACK_MIN);
+        // Nem todos os SDKs (incluindo OpenOrbis) definem PTHREAD_STACK_MIN.
+        // Use o minimo do sistema quando exposto; do contrario mantenha
+        // alinhamento de pagina e deixe pthread_attr_setstacksize validar.
+        size_t min_stack = page;
+#if defined(PTHREAD_STACK_MIN)
+        if (min_stack < static_cast<size_t>(PTHREAD_STACK_MIN))
+            min_stack = static_cast<size_t>(PTHREAD_STACK_MIN);
+#elif defined(_SC_THREAD_STACK_MIN)
+        long queried_min = sysconf(_SC_THREAD_STACK_MIN);
+        if (queried_min > 0 && min_stack < static_cast<size_t>(queried_min))
+            min_stack = static_cast<size_t>(queried_min);
+#endif
         if (stack_size < min_stack) stack_size = min_stack;
         if (stack_size > std::numeric_limits<size_t>::max() - (page - 1)) std::abort();
         size_t rounded = (stack_size + page - 1) / page * page;
