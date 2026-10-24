@@ -9,6 +9,10 @@ class Etapa68Tests(unittest.TestCase):
         result = patch(src)
         self.assertIn('kazuma68_create_surface(instance, &surface)', result)
         self.assertIn('get_proc(VK_NULL_HANDLE, "vkCreateInstance")', result)
+        # Regressao real: ICD direto nao inicializa g_instance no ps4-vkloader.
+        self.assertIn('must(vkCreateInstance(&ici, NULL, &instance), "vkCreateInstance(ps4-vkloader)")', result)
+        self.assertNotIn('must(create_instance(&ici, NULL, &instance)', result)
+        self.assertIn('VKLOADER_INSTANCE_REGISTRADA=OK', result)
         self.assertIn('vkQueuePresentKHR(queue, &pi)', result)
         self.assertIn('ORBIS_SUBMIT_DONE', result)
         self.assertNotIn('vkCreateHeadlessSurfaceEXT(instance, &hsci, NULL, &surface)', result)
