@@ -10,8 +10,13 @@ def nm_undefined(raw):
     values=set()
     for line in raw.splitlines():
         row=line.strip()
-        if row.startswith('U '): values.add(row[2:])
-        elif row: raise ValueError('Formato inesperado llvm-nm -u: '+row)
+        if row.startswith('U '):
+            values.add(row[2:])
+        elif row.startswith(('w ', 'v ')):
+            # Referencias fracas opcionais.
+            continue
+        elif row:
+            raise ValueError('Formato inesperado llvm-nm -u: ' + row)
     return values
 
 def analyze(before, after, definitions, strict):
