@@ -33,7 +33,10 @@ def patch(src: str) -> str:
         '    if (!create_instance) { say("KAZUMA68: VK_CREATE_INSTANCE_AUSENTE"); for (;;) sleep(1); }\n'
         '    say("KAZUMA68: NX_PLAT_GIPA=OK");\n'
         '    VkInstance instance;\n'
-        '    must(create_instance(&ici, NULL, &instance), "nx::plat::gipa->vkCreateInstance");')
+        '    /* Registramos VkInstance pelo shim, nao diretamente pelo ICD:\n'
+        '       vkloader.c usa a g_instance para resolver as chamadas seguintes. */\n'
+        '    must(vkCreateInstance(&ici, NULL, &instance), "vkCreateInstance(ps4-vkloader)");\n'
+        '    say("KAZUMA68: VKLOADER_INSTANCE_REGISTRADA=OK");')
     src = replace_exact(src,
         '    VkHeadlessSurfaceCreateInfoEXT hsci = { .sType = VK_STRUCTURE_TYPE_HEADLESS_SURFACE_CREATE_INFO_EXT };\n'
         '    VkSurfaceKHR surface;\n'

@@ -17,7 +17,8 @@ A ponte invoca o loader Mesa/RADV **real** usando o mesmo SDK verificado da Etap
 
 - `KAZUMA68: BRIDGE_RUNTIME_VULKAN_PS4_REAL; SEM_JOGO`
 - `KAZUMA68: NX_PLAT_GIPA=OK`
-- `KAZUMA68: ok   nx::plat::gipa->vkCreateInstance`
+- `KAZUMA68: ok   vkCreateInstance(ps4-vkloader)`
+- `KAZUMA68: VKLOADER_INSTANCE_REGISTRADA=OK`
 - `KAZUMA68: ok   nx::plat::vulkan_create_surface`
 - `KAZUMA68: NX_PLAT_SURFACE=OK`
 - `KAZUMA68: PRESENTACAO_CONTINUA_INICIADA`
@@ -32,3 +33,33 @@ O repositório não contém nem executa os módulos recompilados (`main`, `sdk`,
 - Não gerar pacote com o jogo ou simulacro de gameplay em nome dele.
 - Não promete fase jogável amanhã: a execução da fase depende de um pipeline AOT e runtime cuja compatibilidade ainda não foi demonstrada.
 - CI verde atesta apenas compilação; cada teste precisa ser executado no console.
+
+
+## Hotfix 68.1 — erro no PS4 real (24/10/2026)
+
+No primeiro PKG da Etapa 68, o Klog confirmou `NX_PLAT_GIPA=OK`, criacao da
+instancia e superficie, mas depois registrou:
+
+```
+vkloader: vkEnumeratePhysicalDevices unresolved - the driver does not export it
+vkloader: FATAL - vkEnumeratePhysicalDevices is not implemented by this driver
+exception: 0xa002031a
+```
+
+**Causa raiz confirmada pela implementacao do loader:** `vkGetInstanceProcAddr`
+no `vkloader.c` devolve diretamente `vk_icdGetInstanceProcAddr`, enquanto
+`vkCreateInstance` do shim registra `g_instance` que os thunks gerados usam.
+Na versao 68 original, a instancia foi criada pelo ponteiro ICD direto;
+isso desviou do shim, deixou `g_instance` nulo e fez a resolucao posterior
+falhar. Nao concluir que RADV perdeu suporte a enumeracao: a Etapa 67
+ja enumerou a GPU com sucesso.
+
+**Correcao:** continuar validando o ponteiro de entrada `nx::plat` e usar
+`vkCreateInstance` atraves do simbolo estatico `ps4-vkloader`, para registrar
+`g_instance`. A ponte `nx::plat::vulkan_create_surface` continua em uso.
+As outras chamadas do renderizador e `ORBIS_SUBMIT_DONE=1` nao mudam.
+
+**Criterio de verificacao:** PKG novo deve ultrapassar
+`VKLOADER_INSTANCE_REGISTRADA=OK`, enumerar a GPU Liverpool,
+apresentar frames e encerrar sem travar. CI verde continua nao sendo prova
+de funcionamento no console. Nao contem o jogo.
