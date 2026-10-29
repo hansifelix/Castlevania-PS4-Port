@@ -75,6 +75,35 @@ jobs:
           readelf -h "$RUNNER_TEMP/lingshu-diagnostic.elf" | grep -E 'Class:|Machine:|Type:'
           ( cd "$RUNNER_TEMP" && sha256sum lingshu-diagnostic.elf > lingshu-diagnostic.sha256 )
           echo 'LINGSHU_NATIVE_PS4_ELF=LINKED_NOT_EBOOT_NOT_PKG_NOT_HARDWARE_TESTED'
+      - name: Converter ELF em EBOOT de diagnostico sem jogo
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$OO_PS4_TOOLCHAIN"
+          test -s "$RUNNER_TEMP/lingshu-diagnostic.elf"
+          test -x "$sdk/bin/linux/create-fself"
+          "$sdk/bin/linux/create-fself" \
+            -in="$RUNNER_TEMP/lingshu-diagnostic.elf" \
+            -out="$RUNNER_TEMP/lingshu-diagnostic.oelf" \
+            --eboot "$RUNNER_TEMP/eboot.bin" \
+            --paid 0x3800000000000011
+          test -s "$RUNNER_TEMP/eboot.bin"
+          test -s "$RUNNER_TEMP/lingshu-diagnostic.oelf"
+          ( cd "$RUNNER_TEMP" && sha256sum eboot.bin > lingshu-eboot.sha256 )
+          stat -c 'LINGSHU_DIAGNOSTIC_EBOOT_BYTES=%s' "$RUNNER_TEMP/eboot.bin"
+          echo 'LINGSHU_DIAGNOSTIC_EBOOT=CREATED_NOT_PKG_NOT_TESTED_ON_PS4'
+
+      - name: Arquivar apenas EBOOT generico e checksum (NAO e PKG)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LINGSHU-NATIVE-PS4-EBOOT-NOT-PKG-NO-GAME
+          path: |
+            ${{ runner.temp }}/eboot.bin
+            ${{ runner.temp }}/lingshu-eboot.sha256
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Arquivar ELF diagnostico sem jogo, nao instalavel
         if: success()
         uses: actions/upload-artifact@v4
