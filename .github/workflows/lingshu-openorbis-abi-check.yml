@@ -1,0 +1,35 @@
+name: Lingshu - Conferir ABI publica OpenOrbis (SEM JOGO)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/lingshu-openorbis-abi-check.yml'
+      - 'tools/lingshu-native-ps4/native_reserve_policy.h'
+      - 'tools/lingshu-native-ps4/native_reserve_ps4_bridge.cpp'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  abi-compilation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Obter apenas headers publicos OpenOrbis v0.5.4
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone --quiet --filter=blob:none --sparse --branch v0.5.4 \
+            https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain.git "$RUNNER_TEMP/openorbis"
+          git -C "$RUNNER_TEMP/openorbis" sparse-checkout set include/orbis
+          test -s "$RUNNER_TEMP/openorbis/include/orbis/libkernel.h"
+          echo "OPENORBIS_HEADERS=$RUNNER_TEMP/openorbis/include" >> "$GITHUB_ENV"
+      - name: Compilar ponte nativa contra declaracoes reais da API
+        shell: bash
+        run: |
+          set -euo pipefail
+          c++ -std=c++20 -O1 -Wall -Wextra -Werror -pedantic \
+            -I"$OPENORBIS_HEADERS" -Itools/lingshu-native-ps4 \
+            -c tools/lingshu-native-ps4/native_reserve_ps4_bridge.cpp \
+            -o "$RUNNER_TEMP/lingshu-native-abi.o"
+          test -s "$RUNNER_TEMP/lingshu-native-abi.o"
+          echo 'LINGSHU_OPENORBIS_HEADER_ABI=COMPILED_HOST_ONLY_NOT_LINKED_NOT_PS4'
