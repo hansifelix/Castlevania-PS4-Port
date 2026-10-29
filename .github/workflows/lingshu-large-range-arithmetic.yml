@@ -1,0 +1,21 @@
+name: Lingshu - Large range arithmetic (host only)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/lingshu-large-range-arithmetic.yml'
+      - 'tools/etapa205/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  arithmetic:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compile and run allocation-free tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          c++ -std=c++20 -Wall -Wextra -Werror -pedantic tools/etapa205/test_large_range_arithmetic.cpp -o /tmp/lingshu-range
+          /tmp/lingshu-range
