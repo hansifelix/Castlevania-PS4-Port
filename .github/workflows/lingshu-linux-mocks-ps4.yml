@@ -1,0 +1,20 @@
+name: Lingshu - Testes Linux de API PS4 simulada (SEM JOGO)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/lingshu-linux-mocks-ps4.yml'
+      - 'tools/lingshu-native-ps4/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  teste-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compilar e testar apenas API simulada no Linux
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tools/lingshu-native-ps4/test_host.sh
