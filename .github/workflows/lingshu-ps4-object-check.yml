@@ -19,7 +19,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends clang-18 llvm-18 binutils curl ca-certificates
+          sudo apt-get install -y --no-install-recommends clang-18 llvm-18 lld-18 binutils curl ca-certificates git
           mkdir -p "$RUNNER_TEMP/sdk" "$RUNNER_TEMP/download"
           curl -fLsS --retry 3 --retry-delay 3 \
             'https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz' \
@@ -45,3 +45,32 @@ jobs:
           readelf -h "$RUNNER_TEMP/lingshu-native-ps4.o" | tee "$RUNNER_TEMP/object-header.txt"
           grep -q 'Advanced Micro Devices X86-64' "$RUNNER_TEMP/object-header.txt"
           echo 'LINGSHU_NATIVE_PS4_OBJECT=COMPILED_NOT_LINKED_NOT_EBOOT_NOT_PKG'
+
+      - name: Obter helper de tela OpenOrbis em commit fixado
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone -q --filter=blob:none --sparse https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain.git "$RUNNER_TEMP/openorbis-source"
+          git -C "$RUNNER_TEMP/openorbis-source" checkout -q --detach 0a1aaf9dd4a92695538bdeb09fb056d06dd11725
+          git -C "$RUNNER_TEMP/openorbis-source" sparse-checkout set samples/_common
+          test -s "$RUNNER_TEMP/openorbis-source/samples/_common/graphics.cpp"
+          echo "LINGSHU_GRAPHICS=$RUNNER_TEMP/openorbis-source/samples/_common" >> "$GITHUB_ENV"
+      - name: Compilar e linkar somente ELF de diagnostico sem jogo
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$OO_PS4_TOOLCHAIN"
+          flags=(--target=x86_64-pc-freebsd12-elf -std=c++20 -O1 -fPIC
+            -funwind-tables -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE
+            -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1"
+            -I"$LINGSHU_GRAPHICS")
+          clang++-18 "${flags[@]}" -c tools/lingshu-native-ps4/native_api_console.cpp -o "$RUNNER_TEMP/lingshu-console.o"
+          clang++-18 "${flags[@]}" -c "$LINGSHU_GRAPHICS/graphics.cpp" -o "$RUNNER_TEMP/lingshu-graphics.o"
+          ld.lld-18 -m elf_x86_64 -pie --script "$sdk/link.x" --eh-frame-hdr \
+            -L"$sdk/lib" -o "$RUNNER_TEMP/lingshu-diagnostic.elf" \
+            "$sdk/lib/crt1.o" "$RUNNER_TEMP/lingshu-console.o" \
+            "$RUNNER_TEMP/lingshu-native-ps4.o" "$RUNNER_TEMP/lingshu-graphics.o" \
+            -lc -lkernel -lc++ -lSceVideoOut -lScePad -lSceUserService -lSceSystemService -lSceSysmodule
+          test -s "$RUNNER_TEMP/lingshu-diagnostic.elf"
+          readelf -h "$RUNNER_TEMP/lingshu-diagnostic.elf" | grep -E 'Class:|Machine:|Type:'
+          echo 'LINGSHU_NATIVE_PS4_ELF=LINKED_NOT_EBOOT_NOT_PKG_NOT_HARDWARE_TESTED'
