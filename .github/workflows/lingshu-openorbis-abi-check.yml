@@ -27,7 +27,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          c++ -std=c++20 -O1 -Wall -Wextra -Werror -pedantic \
+          # OpenOrbis v0.5.4 kernel.h contains two anonymous type-only
+          # members (uint32_t; and int32_t;). Clang emits a warning for
+          # these upstream declarations. Suppress that warning ONLY; keep
+          # all other warnings as errors and leave SDK files untouched.
+          clang++ -std=c++20 -O1 -Wall -Wextra -Werror -pedantic \\
+            -Wno-missing-declarations \\
             -I"$OPENORBIS_HEADERS" -Itools/lingshu-native-ps4 \
             -c tools/lingshu-native-ps4/native_reserve_ps4_bridge.cpp \
             -o "$RUNNER_TEMP/lingshu-native-abi.o"
