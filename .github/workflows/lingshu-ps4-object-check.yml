@@ -73,4 +73,15 @@ jobs:
             -lc -lkernel -lc++ -lSceVideoOut -lScePad -lSceUserService -lSceSystemService -lSceSysmodule
           test -s "$RUNNER_TEMP/lingshu-diagnostic.elf"
           readelf -h "$RUNNER_TEMP/lingshu-diagnostic.elf" | grep -E 'Class:|Machine:|Type:'
+          sha256sum "$RUNNER_TEMP/lingshu-diagnostic.elf" > "$RUNNER_TEMP/lingshu-diagnostic.sha256"
           echo 'LINGSHU_NATIVE_PS4_ELF=LINKED_NOT_EBOOT_NOT_PKG_NOT_HARDWARE_TESTED'
+      - name: Arquivar ELF diagnostico sem jogo, nao instalavel
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LINGSHU-NATIVE-PS4-ELF-NOT-EBOOT-NOT-PKG
+          path: |
+            ${{ runner.temp }}/lingshu-diagnostic.elf
+            ${{ runner.temp }}/lingshu-diagnostic.sha256
+          if-no-files-found: error
+          retention-days: 7
