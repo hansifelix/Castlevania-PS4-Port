@@ -1,0 +1,24 @@
+name: Lingshu - Teste do adaptador real VM no Linux (SEM JOGO)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/lingshu-vm-real-linux.yml'
+      - 'tools/etapa146/**'
+      - 'tools/etapa185/**'
+      - 'tools/etapa202/**'
+      - 'tools/etapa203/**'
+      - 'tools/etapa204/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test-real-adapter:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Testar adaptador verdadeiro em Linux com falhas injetadas
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tools/etapa185/test_public_vm.sh
