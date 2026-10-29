@@ -104,6 +104,48 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+      - name: Empacotar apenas EBOOT generico em PKG de diagnostico
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y --no-install-recommends dpkg-dev
+          git clone -q https://github.com/orbis-ports/orbis-porting-kit.git "$RUNNER_TEMP/orbis-kit"
+          git -C "$RUNNER_TEMP/orbis-kit" checkout -q --detach 213b0c38ff25ea7ca402c8844a6494086d0f1cae
+          test -s "$RUNNER_TEMP/orbis-kit/scripts/ps4/make-pkg.sh"
+          mkdir -p "$RUNNER_TEMP/ssl11" "$RUNNER_TEMP/pkg-output"
+          curl --fail --location --retry 3 --silent --show-error \
+            'https://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb' \
+            -o "$RUNNER_TEMP/libssl11.deb"
+          dpkg-deb -x "$RUNNER_TEMP/libssl11.deb" "$RUNNER_TEMP/ssl11"
+          compat="$RUNNER_TEMP/ssl11/usr/lib/x86_64-linux-gnu"
+          test -s "$compat/libssl.so.1.1"
+          test -s "$compat/libcrypto.so.1.1"
+          export PS4_PKGTOOL_OPENSSL_LIB="$compat"
+          bash "$RUNNER_TEMP/orbis-kit/scripts/ps4/make-pkg.sh" \
+            --eboot "$RUNNER_TEMP/eboot.bin" \
+            --out-dir "$RUNNER_TEMP/pkg-output" \
+            --title-id KAZM19000 --title 'Lingshu Memoria PS4 - DIAGNOSTICO' \
+            --version 01.00 --content-label LINGSHU190NATIVE \
+            --sdk "$OO_PS4_TOOLCHAIN"
+          find "$RUNNER_TEMP/pkg-output" -type f -name '*.pkg' -size +1000c -print \
+            | tee "$RUNNER_TEMP/pkg-files.txt"
+          test "$(wc -l < "$RUNNER_TEMP/pkg-files.txt")" -eq 1
+          pkg="$(cat "$RUNNER_TEMP/pkg-files.txt")"
+          sha256sum "$pkg" > "$RUNNER_TEMP/diagnostic-pkg.sha256"
+          stat -c 'LINGSHU190_DIAGNOSTIC_PKG_BYTES=%s' "$pkg"
+          echo 'LINGSHU190_PKG=BUILT_OFFLINE_NO_GAME_NOT_TESTED_PS4'
+
+      - name: Publicar PKG generico apenas se o empacotamento passou
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LINGSHU-190-NATIVE-MEMORY-PS4-PKG-NO-GAME
+          path: |
+            ${{ runner.temp }}/pkg-output/*.pkg
+            ${{ runner.temp }}/diagnostic-pkg.sha256
+          if-no-files-found: error
+          retention-days: 7
+
       - name: Arquivar ELF diagnostico sem jogo, nao instalavel
         if: success()
         uses: actions/upload-artifact@v4
