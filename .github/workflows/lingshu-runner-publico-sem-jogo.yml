@@ -1,0 +1,24 @@
+name: Lingshu - Prova minima de runner publico (SEM JOGO)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/lingshu-runner-publico-sem-jogo.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  alocacao-runner:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Verificar que o GitHub iniciou o runner
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'LINGSHU_RUNNER_PUBLICO_ALOCADO=YES'
+          echo 'LINGSHU_PUBLICO_SEM_GAME_SEM_SDK_SEM_PKG=YES'
+          uname -s
+          python3 --version
+          c++ --version | head -n 1
