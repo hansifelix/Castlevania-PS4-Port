@@ -72,3 +72,34 @@ extern "C" bool lingshu_atomic_compare_exchange_16_generic(size_t size,
     if (!ok) memcpy(expected, &want, sizeof want); // required compare_exchange ABI
     return ok;
 }
+
+
+// Size-specialized GCC/Clang x86-64 ABI (different from generic size-first ABI).
+// Verify with nm: GNU toolchains may request these two names for std::atomic<16B>.
+extern "C" __attribute__((visibility("default")))
+unsigned __int128 lingshu_atomic_load16_specialized(const volatile void* ptr, int model)
+    __asm__("__atomic_load_16");
+extern "C" __attribute__((visibility("default")))
+bool lingshu_atomic_cas16_specialized(volatile void* ptr, void* expected,
+    unsigned __int128 desired, int success_model, int failure_model)
+    __asm__("__atomic_compare_exchange_16");
+
+extern "C" unsigned __int128 lingshu_atomic_load16_specialized(const volatile void* ptr, int model) {
+    (void)model;
+    require16(16, ptr);
+    Pair128 observed{0, 0};
+    cas128(const_cast<volatile void*>(ptr), observed, Pair128{0, 0});
+    return (static_cast<unsigned __int128>(observed.hi) << 64) | observed.lo;
+}
+
+extern "C" bool lingshu_atomic_cas16_specialized(volatile void* ptr, void* expected,
+    unsigned __int128 desired, int success_model, int failure_model) {
+    (void)success_model;
+    (void)failure_model;
+    require16(16, ptr);
+    Pair128 current{}, requested{static_cast<uint64_t>(desired), static_cast<uint64_t>(desired >> 64)};
+    memcpy(&current, expected, sizeof current);
+    const bool success = cas128(ptr, current, requested);
+    if (!success) memcpy(expected, &current, sizeof current);
+    return success;
+}
