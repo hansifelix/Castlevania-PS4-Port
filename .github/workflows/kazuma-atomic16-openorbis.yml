@@ -1,0 +1,81 @@
+name: Kazuma - Atomic ABI 16-byte OpenOrbis proof (no game)
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'tools/etapa167/**'
+      - '.github/workflows/kazuma-atomic16-openorbis.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'tools/etapa167/**'
+      - '.github/workflows/kazuma-atomic16-openorbis.yml'
+permissions:
+  contents: read
+jobs:
+  validar-libatomic-cx16:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar clang 18 e SDK OpenOrbis v0.5.4 (SHA fixado)
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang-18 llvm-18 lld-18 curl zstd
+          mkdir -p "$RUNNER_TEMP/sdk" "$RUNNER_TEMP/download"
+          curl -fLsS --retry 3 --retry-delay 3 \
+            https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz \
+            -o "$RUNNER_TEMP/download/openorbis.tar.gz"
+          echo '3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526  '"$RUNNER_TEMP/download/openorbis.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/download/openorbis.tar.gz" -C "$RUNNER_TEMP/sdk"
+          sdk_link="$(find "$RUNNER_TEMP/sdk" -type f -name link.x -print -quit)"
+          test -n "$sdk_link"
+          echo "OO_PS4_TOOLCHAIN=$(dirname "$sdk_link")" >> "$GITHUB_ENV"
+      - name: Exercitar a semantica do ABI 16 bytes no Linux (concorrencia real)
+        shell: bash
+        run: |
+          set -euo pipefail
+          for opt in 0 2; do
+            clang++-18 -std=c++20 -O"$opt" -Wall -Wextra -Werror -pthread \
+              tools/etapa167/atomic_abi_ps4.cpp tools/etapa167/test_atomic_abi_ps4.cpp \
+              -o "$RUNNER_TEMP/atomic-host-$opt"
+            "$RUNNER_TEMP/atomic-host-$opt"
+          done
+      - name: Compilar e vincular sonda real x86_64 OpenOrbis SEM libatomic
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$OO_PS4_TOOLCHAIN"
+          cat > "$RUNNER_TEMP/probe.cpp" <<'CPP'
+          #include <atomic>
+          #include <cstdint>
+          struct alignas(16) Value { std::uint64_t lo, hi; };
+          static std::atomic<Value> value;
+          extern "C" int atomic_sample() {
+              Value desired{1,2}, expected{0,0};
+              bool ok = value.compare_exchange_strong(expected, desired);
+              Value got = value.load();
+              return ok ? int(got.lo + got.hi) : 0;
+          }
+          int main() { return atomic_sample(); }
+          CPP
+          common=(--target=x86_64-pc-freebsd12-elf -std=c++20 -O0 -g0 -fPIC \
+            -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
+            -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1")
+          clang++-18 "${common[@]}" -c "$RUNNER_TEMP/probe.cpp" -o "$RUNNER_TEMP/probe.o"
+          clang++-18 "${common[@]}" -c tools/etapa167/atomic_abi_ps4.cpp -o "$RUNNER_TEMP/atomic_abi.o"
+          llvm-nm-18 -u "$RUNNER_TEMP/probe.o" > "$RUNNER_TEMP/undef.txt"
+          llvm-nm-18 --defined-only "$RUNNER_TEMP/atomic_abi.o" > "$RUNNER_TEMP/defined.txt"
+          grep -E 'U __atomic_(load|compare_exchange)$' "$RUNNER_TEMP/undef.txt"
+          grep -E ' [Tt] __atomic_load$' "$RUNNER_TEMP/defined.txt"
+          grep -E ' [Tt] __atomic_compare_exchange$' "$RUNNER_TEMP/defined.txt"
+          # A specific compile/link gate. It does NOT execute the ELF on the PS4.
+          ld.lld-18 -m elf_x86_64 -pie --script "$sdk/link.x" --eh-frame-hdr \
+            "$RUNNER_TEMP/probe.o" "$RUNNER_TEMP/atomic_abi.o" \
+            -L"$sdk/lib" -lc -lkernel -lc++ "$sdk/lib/crt1.o" \
+            -o "$RUNNER_TEMP/atomic-probe-ps4.elf"
+          readelf -h "$RUNNER_TEMP/atomic-probe-ps4.elf" \
+            | grep -E 'Class:|Machine:|Type:'
+          echo 'LINGSHU167_PS4_ATOMIC16_LINK=PASSED_NO_GAME_NO_HARDWARE_TEST'
