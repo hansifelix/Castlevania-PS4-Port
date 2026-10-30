@@ -56,7 +56,7 @@ inline Result run(std::FILE* log,ReserveFn reserve_fn,MapFn map_fn,
             const auto* raw=reinterpret_cast<const unsigned char*>(&info);
             const std::size_t count=sizeof(Info)<48?sizeof(Info):48;
             for(std::size_t j=0;j<count;++j)std::fprintf(log,"%02x",unsigned(raw[j]));
-            std::fprintf(log,"\\n");
+            std::fprintf(log,"\n");
         } else {
             std::fprintf(log,"LINGSHU208_QUERY name=%s status=UNAVAILABLE rc=0x%08x\n",
                          label,static_cast<unsigned>(rc));
