@@ -42,6 +42,10 @@ jobs:
               tools/etapa167/atomic_abi_ps4.cpp tools/etapa167/test_atomic_abi_ps4.cpp \
               -o "$RUNNER_TEMP/atomic-host-$opt"
             "$RUNNER_TEMP/atomic-host-$opt"
+            clang++-18 -std=c++20 -O"$opt" -Wall -Wextra -Werror -pthread \
+              tools/etapa167/atomic_abi_ps4.cpp tools/etapa167/test_std_atomic16_integration.cpp \
+              -o "$RUNNER_TEMP/atomic-integration-$opt"
+            "$RUNNER_TEMP/atomic-integration-$opt"
           done
       - name: Compilar e vincular sonda real x86_64 OpenOrbis SEM libatomic
         shell: bash
@@ -59,7 +63,21 @@ jobs:
               Value got = value.load();
               return ok ? int(got.lo + got.hi) : 0;
           }
-          int main() { return atomic_sample(); }
+          // Force a relocation against the size-specialized ABI as well.
+          // On some SDK C++ standard libraries std::atomic<Value> uses generic ABI.
+          extern "C" unsigned __int128 atomic_load16(const volatile void*, int)
+              __asm__("__atomic_load_16");
+          extern "C" bool atomic_cas16(volatile void*, void*, unsigned __int128, int, int)
+              __asm__("__atomic_compare_exchange_16");
+          extern "C" int atomic_specialized_sample() {
+              alignas(16) static Value storage{0,0};
+              auto first = atomic_load16(&storage, __ATOMIC_SEQ_CST);
+              unsigned __int128 wanted = (static_cast<unsigned __int128>(2) << 64) | 1;
+              unsigned __int128 expected = 0;
+              bool ok = atomic_cas16(&storage, &expected, wanted, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST);
+              return ok ? int(first + 1) : int(expected);
+          }
+          int main() { return atomic_sample() + atomic_specialized_sample(); }
           CPP
           common=(--target=x86_64-pc-freebsd12-elf -std=c++20 -O0 -g0 -fPIC \
             -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
@@ -70,7 +88,36 @@ jobs:
           llvm-nm-18 --defined-only "$RUNNER_TEMP/atomic_abi.o" > "$RUNNER_TEMP/defined.txt"
           grep -E 'U __atomic_(load|compare_exchange)$' "$RUNNER_TEMP/undef.txt"
           grep -E ' [Tt] __atomic_load$' "$RUNNER_TEMP/defined.txt"
-          grep -E ' [Tt] __atomic_compare_exchange$' "$RUNNER_TEMP/defined.txt"
+          grep -E ' [Tt] __atomic_compare_exchange
+          # A specific compile/link gate. It does NOT execute the ELF on the PS4.
+          ld.lld-18 -m elf_x86_64 -pie --script "$sdk/link.x" --eh-frame-hdr \
+            "$RUNNER_TEMP/probe.o" "$RUNNER_TEMP/atomic_abi.o" \
+            -L"$sdk/lib" -lc -lkernel -lc++ "$sdk/lib/crt1.o" \
+            -o "$RUNNER_TEMP/atomic-probe-ps4.elf"
+          readelf -h "$RUNNER_TEMP/atomic-probe-ps4.elf" \
+            | grep -E 'Class:|Machine:|Type:'
+          echo 'LINGSHU167_PS4_ATOMIC16_LINK=PASSED_NO_GAME_NO_HARDWARE_TEST'
+ "$RUNNER_TEMP/defined.txt"
+          grep -E ' [Tt] __atomic_load_16
+          # A specific compile/link gate. It does NOT execute the ELF on the PS4.
+          ld.lld-18 -m elf_x86_64 -pie --script "$sdk/link.x" --eh-frame-hdr \
+            "$RUNNER_TEMP/probe.o" "$RUNNER_TEMP/atomic_abi.o" \
+            -L"$sdk/lib" -lc -lkernel -lc++ "$sdk/lib/crt1.o" \
+            -o "$RUNNER_TEMP/atomic-probe-ps4.elf"
+          readelf -h "$RUNNER_TEMP/atomic-probe-ps4.elf" \
+            | grep -E 'Class:|Machine:|Type:'
+          echo 'LINGSHU167_PS4_ATOMIC16_LINK=PASSED_NO_GAME_NO_HARDWARE_TEST'
+ "$RUNNER_TEMP/defined.txt"
+          grep -E ' [Tt] __atomic_compare_exchange_16
+          # A specific compile/link gate. It does NOT execute the ELF on the PS4.
+          ld.lld-18 -m elf_x86_64 -pie --script "$sdk/link.x" --eh-frame-hdr \
+            "$RUNNER_TEMP/probe.o" "$RUNNER_TEMP/atomic_abi.o" \
+            -L"$sdk/lib" -lc -lkernel -lc++ "$sdk/lib/crt1.o" \
+            -o "$RUNNER_TEMP/atomic-probe-ps4.elf"
+          readelf -h "$RUNNER_TEMP/atomic-probe-ps4.elf" \
+            | grep -E 'Class:|Machine:|Type:'
+          echo 'LINGSHU167_PS4_ATOMIC16_LINK=PASSED_NO_GAME_NO_HARDWARE_TEST'
+ "$RUNNER_TEMP/defined.txt"
           # A specific compile/link gate. It does NOT execute the ELF on the PS4.
           ld.lld-18 -m elf_x86_64 -pie --script "$sdk/link.x" --eh-frame-hdr \
             "$RUNNER_TEMP/probe.o" "$RUNNER_TEMP/atomic_abi.o" \
