@@ -63,8 +63,6 @@ jobs:
               Value got = value.load();
               return ok ? int(got.lo + got.hi) : 0;
           }
-          // Force a relocation against the size-specialized ABI as well.
-          // On some SDK C++ standard libraries std::atomic<Value> uses generic ABI.
           extern "C" unsigned __int128 atomic_load16(const volatile void*, int)
               __asm__("__atomic_load_16");
           extern "C" bool atomic_cas16(volatile void*, void*, unsigned __int128, int, int)
@@ -88,36 +86,9 @@ jobs:
           llvm-nm-18 --defined-only "$RUNNER_TEMP/atomic_abi.o" > "$RUNNER_TEMP/defined.txt"
           grep -E 'U __atomic_(load|compare_exchange)$' "$RUNNER_TEMP/undef.txt"
           grep -E ' [Tt] __atomic_load$' "$RUNNER_TEMP/defined.txt"
-          grep -E ' [Tt] __atomic_compare_exchange
-          # A specific compile/link gate. It does NOT execute the ELF on the PS4.
-          ld.lld-18 -m elf_x86_64 -pie --script "$sdk/link.x" --eh-frame-hdr \
-            "$RUNNER_TEMP/probe.o" "$RUNNER_TEMP/atomic_abi.o" \
-            -L"$sdk/lib" -lc -lkernel -lc++ "$sdk/lib/crt1.o" \
-            -o "$RUNNER_TEMP/atomic-probe-ps4.elf"
-          readelf -h "$RUNNER_TEMP/atomic-probe-ps4.elf" \
-            | grep -E 'Class:|Machine:|Type:'
-          echo 'LINGSHU167_PS4_ATOMIC16_LINK=PASSED_NO_GAME_NO_HARDWARE_TEST'
- "$RUNNER_TEMP/defined.txt"
-          grep -E ' [Tt] __atomic_load_16
-          # A specific compile/link gate. It does NOT execute the ELF on the PS4.
-          ld.lld-18 -m elf_x86_64 -pie --script "$sdk/link.x" --eh-frame-hdr \
-            "$RUNNER_TEMP/probe.o" "$RUNNER_TEMP/atomic_abi.o" \
-            -L"$sdk/lib" -lc -lkernel -lc++ "$sdk/lib/crt1.o" \
-            -o "$RUNNER_TEMP/atomic-probe-ps4.elf"
-          readelf -h "$RUNNER_TEMP/atomic-probe-ps4.elf" \
-            | grep -E 'Class:|Machine:|Type:'
-          echo 'LINGSHU167_PS4_ATOMIC16_LINK=PASSED_NO_GAME_NO_HARDWARE_TEST'
- "$RUNNER_TEMP/defined.txt"
-          grep -E ' [Tt] __atomic_compare_exchange_16
-          # A specific compile/link gate. It does NOT execute the ELF on the PS4.
-          ld.lld-18 -m elf_x86_64 -pie --script "$sdk/link.x" --eh-frame-hdr \
-            "$RUNNER_TEMP/probe.o" "$RUNNER_TEMP/atomic_abi.o" \
-            -L"$sdk/lib" -lc -lkernel -lc++ "$sdk/lib/crt1.o" \
-            -o "$RUNNER_TEMP/atomic-probe-ps4.elf"
-          readelf -h "$RUNNER_TEMP/atomic-probe-ps4.elf" \
-            | grep -E 'Class:|Machine:|Type:'
-          echo 'LINGSHU167_PS4_ATOMIC16_LINK=PASSED_NO_GAME_NO_HARDWARE_TEST'
- "$RUNNER_TEMP/defined.txt"
+          grep -E ' [Tt] __atomic_compare_exchange$' "$RUNNER_TEMP/defined.txt"
+          grep -E ' [Tt] __atomic_load_16$' "$RUNNER_TEMP/defined.txt"
+          grep -E ' [Tt] __atomic_compare_exchange_16$' "$RUNNER_TEMP/defined.txt"
           # A specific compile/link gate. It does NOT execute the ELF on the PS4.
           ld.lld-18 -m elf_x86_64 -pie --script "$sdk/link.x" --eh-frame-hdr \
             "$RUNNER_TEMP/probe.o" "$RUNNER_TEMP/atomic_abi.o" \
