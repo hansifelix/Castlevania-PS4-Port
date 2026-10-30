@@ -1,0 +1,163 @@
+name: Lingshu207 - Memoria flexivel 16K e protecao (SEM JOGO)
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/lingshu207-flexible-map-pkg.yml'
+      - 'tools/lingshu-flexible-ps4/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  ps4-object:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validar mapeamento flexivel e falhas simuladas no Linux
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tools/lingshu-flexible-ps4/run_host_tests.sh
+
+      - name: Instalar Clang e obter SDK OpenOrbis publico fixado
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang-18 llvm-18 lld-18 binutils curl ca-certificates git
+          mkdir -p "$RUNNER_TEMP/sdk" "$RUNNER_TEMP/download"
+          curl -fLsS --retry 3 --retry-delay 3 \
+            'https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz' \
+            -o "$RUNNER_TEMP/download/sdk.tar.gz"
+          echo '3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526  '"$RUNNER_TEMP/download/sdk.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/download/sdk.tar.gz" -C "$RUNNER_TEMP/sdk"
+          sdk_link="$(find "$RUNNER_TEMP/sdk" -type f -name link.x -print -quit)"
+          test -n "$sdk_link"
+          echo "OO_PS4_TOOLCHAIN=$(dirname "$sdk_link")" >> "$GITHUB_ENV"
+      - name: Compilar ponte C++ para alvo x86-64 PS4
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$OO_PS4_TOOLCHAIN"
+          clang++-18 --target=x86_64-pc-freebsd12-elf \
+            -std=c++20 -O1 -fPIC -Wall -Wextra -Werror \
+            -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
+            -isysroot "$sdk" -isystem "$sdk/include" \
+            -isystem "$sdk/include/c++/v1" \
+            -Itools/lingshu-flexible-ps4 \
+            -c tools/lingshu-flexible-ps4/native_flexible_bridge.cpp \
+            -o "$RUNNER_TEMP/lingshu-native-ps4.o"
+          readelf -h "$RUNNER_TEMP/lingshu-native-ps4.o" | tee "$RUNNER_TEMP/object-header.txt"
+          grep -q 'Advanced Micro Devices X86-64' "$RUNNER_TEMP/object-header.txt"
+          echo 'LINGSHU_NATIVE_PS4_OBJECT=COMPILED_NOT_LINKED_NOT_EBOOT_NOT_PKG'
+
+      - name: Obter helper de tela OpenOrbis em commit fixado
+        shell: bash
+        run: |
+          set -euo pipefail
+          git clone -q --filter=blob:none --sparse https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain.git "$RUNNER_TEMP/openorbis-source"
+          git -C "$RUNNER_TEMP/openorbis-source" checkout -q --detach 0a1aaf9dd4a92695538bdeb09fb056d06dd11725
+          git -C "$RUNNER_TEMP/openorbis-source" sparse-checkout set samples/_common
+          test -s "$RUNNER_TEMP/openorbis-source/samples/_common/graphics.cpp"
+          echo "LINGSHU_GRAPHICS=$RUNNER_TEMP/openorbis-source/samples/_common" >> "$GITHUB_ENV"
+      - name: Compilar e linkar somente ELF de diagnostico sem jogo
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$OO_PS4_TOOLCHAIN"
+          flags=(--target=x86_64-pc-freebsd12-elf -std=c++20 -O1 -fPIC
+            -funwind-tables -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE
+            -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1"
+            -I"$LINGSHU_GRAPHICS")
+          clang++-18 "${flags[@]}" -c tools/lingshu-flexible-ps4/native_flexible_console.cpp -o "$RUNNER_TEMP/lingshu-console.o"
+          clang++-18 "${flags[@]}" -c "$LINGSHU_GRAPHICS/graphics.cpp" -o "$RUNNER_TEMP/lingshu-graphics.o"
+          ld.lld-18 -m elf_x86_64 -pie --script "$sdk/link.x" --eh-frame-hdr \
+            -L"$sdk/lib" -o "$RUNNER_TEMP/lingshu207-diagnostic.elf" \
+            "$sdk/lib/crt1.o" "$RUNNER_TEMP/lingshu-console.o" \
+            "$RUNNER_TEMP/lingshu-native-ps4.o" "$RUNNER_TEMP/lingshu-graphics.o" \
+            -lc -lkernel -lc++ -lSceVideoOut -lScePad -lSceUserService -lSceSystemService -lSceSysmodule
+          test -s "$RUNNER_TEMP/lingshu207-diagnostic.elf"
+          readelf -h "$RUNNER_TEMP/lingshu207-diagnostic.elf" | grep -E 'Class:|Machine:|Type:'
+          ( cd "$RUNNER_TEMP" && sha256sum lingshu207-diagnostic.elf > lingshu207-diagnostic.sha256 )
+          echo 'LINGSHU_NATIVE_PS4_ELF=LINKED_NOT_EBOOT_NOT_PKG_NOT_HARDWARE_TESTED'
+      - name: Converter ELF em EBOOT de diagnostico sem jogo
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$OO_PS4_TOOLCHAIN"
+          test -s "$RUNNER_TEMP/lingshu207-diagnostic.elf"
+          test -x "$sdk/bin/linux/create-fself"
+          "$sdk/bin/linux/create-fself" \
+            -in="$RUNNER_TEMP/lingshu207-diagnostic.elf" \
+            -out="$RUNNER_TEMP/lingshu207-diagnostic.oelf" \
+            --eboot "$RUNNER_TEMP/eboot.bin" \
+            --paid 0x3800000000000011
+          test -s "$RUNNER_TEMP/eboot.bin"
+          test -s "$RUNNER_TEMP/lingshu207-diagnostic.oelf"
+          ( cd "$RUNNER_TEMP" && sha256sum eboot.bin > lingshu-eboot.sha256 )
+          stat -c 'LINGSHU_DIAGNOSTIC_EBOOT_BYTES=%s' "$RUNNER_TEMP/eboot.bin"
+          echo 'LINGSHU_DIAGNOSTIC_EBOOT=CREATED_NOT_PKG_NOT_TESTED_ON_PS4'
+
+      - name: Arquivar apenas EBOOT generico e checksum (NAO e PKG)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LINGSHU207-EBOOT-NOT-PKG-NO-GAME
+          path: |
+            ${{ runner.temp }}/eboot.bin
+            ${{ runner.temp }}/lingshu-eboot.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Empacotar apenas EBOOT generico em PKG de diagnostico
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y --no-install-recommends dpkg-dev
+          git clone -q https://github.com/orbis-ports/orbis-porting-kit.git "$RUNNER_TEMP/orbis-kit"
+          git -C "$RUNNER_TEMP/orbis-kit" checkout -q --detach 213b0c38ff25ea7ca402c8844a6494086d0f1cae
+          test -s "$RUNNER_TEMP/orbis-kit/scripts/ps4/make-pkg.sh"
+          mkdir -p "$RUNNER_TEMP/ssl11" "$RUNNER_TEMP/pkg-output"
+          curl --fail --location --retry 3 --silent --show-error \
+            'https://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.1f-1ubuntu2.24_amd64.deb' \
+            -o "$RUNNER_TEMP/libssl11.deb"
+          dpkg-deb -x "$RUNNER_TEMP/libssl11.deb" "$RUNNER_TEMP/ssl11"
+          compat="$RUNNER_TEMP/ssl11/usr/lib/x86_64-linux-gnu"
+          test -s "$compat/libssl.so.1.1"
+          test -s "$compat/libcrypto.so.1.1"
+          export PS4_PKGTOOL_OPENSSL_LIB="$compat"
+          bash "$RUNNER_TEMP/orbis-kit/scripts/ps4/make-pkg.sh" \
+            --eboot "$RUNNER_TEMP/eboot.bin" \
+            --out-dir "$RUNNER_TEMP/pkg-output" \
+            --title-id KAZM20700 --title 'Lingshu 207 PS4 - Flexible 16K' \
+            --version 01.00 --content-label LINGSHU207NATIVE \
+            --sdk "$OO_PS4_TOOLCHAIN"
+          find "$RUNNER_TEMP/pkg-output" -type f -name '*.pkg' -size +1000c -print \
+            | tee "$RUNNER_TEMP/pkg-files.txt"
+          test "$(wc -l < "$RUNNER_TEMP/pkg-files.txt")" -eq 1
+          pkg="$(cat "$RUNNER_TEMP/pkg-files.txt")"
+          sha256sum "$pkg" > "$RUNNER_TEMP/diagnostic-pkg.sha256"
+          stat -c 'LINGSHU207_DIAGNOSTIC_PKG_BYTES=%s' "$pkg"
+          echo 'LINGSHU207_PKG=BUILT_OFFLINE_NO_GAME_NOT_TESTED_PS4'
+
+      - name: Publicar PKG generico apenas se o empacotamento passou
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LINGSHU207-FLEXIBLE-16K-MEMORY-PS4-PKG-NO-GAME
+          path: |
+            ${{ runner.temp }}/pkg-output/*.pkg
+            ${{ runner.temp }}/diagnostic-pkg.sha256
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Arquivar ELF diagnostico sem jogo, nao instalavel
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: LINGSHU207-ELF-NOT-EBOOT-NOT-PKG
+          path: |
+            ${{ runner.temp }}/lingshu207-diagnostic.elf
+            ${{ runner.temp }}/lingshu207-diagnostic.sha256
+          if-no-files-found: error
+          retention-days: 7
