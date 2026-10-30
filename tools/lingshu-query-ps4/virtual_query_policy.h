@@ -45,13 +45,18 @@ inline Result run(std::FILE* log,ReserveFn reserve_fn,MapFn map_fn,
         const std::int32_t rc=query_fn(addr,0,&info,sizeof info);
         if(rc==0) {
             ++r.query_ok;
+            // SDK header variants disagree on VirtualQueryInfo field
+            // names/layout. Never guess a struct layout or call its fields
+            // before inspecting the ACTUAL toolchain version. Record only
+            // the bytes returned into a zero-initialized typed SDK buffer.
+            // These are metadata about our own test mapping, not page data.
             std::fprintf(log,
-                "LINGSHU208_QUERY name=%s status=OK start=%llx end=%llx prot=%d mtype=%d flex=%u direct=%u committed=%u\n",
-                label,(unsigned long long)(std::uintptr_t)info.start_addr,
-                (unsigned long long)(std::uintptr_t)info.end_addr,
-                int(info.prot),int(info.mtype),
-                unsigned(info.isFlexibleMemory),unsigned(info.isDirectMemory),
-                unsigned(info.isCommitted));
+                "LINGSHU208_QUERY name=%s status=OK info_bytes=%llu raw_prefix_hex=",
+                label,(unsigned long long)sizeof(Info));
+            const auto* raw=reinterpret_cast<const unsigned char*>(&info);
+            const std::size_t count=sizeof(Info)<48?sizeof(Info):48;
+            for(std::size_t j=0;j<count;++j)std::fprintf(log,"%02x",unsigned(raw[j]));
+            std::fprintf(log,"\\n");
         } else {
             std::fprintf(log,"LINGSHU208_QUERY name=%s status=UNAVAILABLE rc=0x%08x\n",
                          label,static_cast<unsigned>(rc));
