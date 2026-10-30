@@ -72,28 +72,28 @@ jobs:
           clang++-18 "${flags[@]}" -c tools/lingshu-flexible-ps4/native_flexible_console.cpp -o "$RUNNER_TEMP/lingshu-console.o"
           clang++-18 "${flags[@]}" -c "$LINGSHU_GRAPHICS/graphics.cpp" -o "$RUNNER_TEMP/lingshu-graphics.o"
           ld.lld-18 -m elf_x86_64 -pie --script "$sdk/link.x" --eh-frame-hdr \
-            -L"$sdk/lib" -o "$RUNNER_TEMP/lingshu206-diagnostic.elf" \
+            -L"$sdk/lib" -o "$RUNNER_TEMP/lingshu207-diagnostic.elf" \
             "$sdk/lib/crt1.o" "$RUNNER_TEMP/lingshu-console.o" \
             "$RUNNER_TEMP/lingshu-native-ps4.o" "$RUNNER_TEMP/lingshu-graphics.o" \
             -lc -lkernel -lc++ -lSceVideoOut -lScePad -lSceUserService -lSceSystemService -lSceSysmodule
-          test -s "$RUNNER_TEMP/lingshu206-diagnostic.elf"
-          readelf -h "$RUNNER_TEMP/lingshu206-diagnostic.elf" | grep -E 'Class:|Machine:|Type:'
-          ( cd "$RUNNER_TEMP" && sha256sum lingshu206-diagnostic.elf > lingshu206-diagnostic.sha256 )
+          test -s "$RUNNER_TEMP/lingshu207-diagnostic.elf"
+          readelf -h "$RUNNER_TEMP/lingshu207-diagnostic.elf" | grep -E 'Class:|Machine:|Type:'
+          ( cd "$RUNNER_TEMP" && sha256sum lingshu207-diagnostic.elf > lingshu207-diagnostic.sha256 )
           echo 'LINGSHU_NATIVE_PS4_ELF=LINKED_NOT_EBOOT_NOT_PKG_NOT_HARDWARE_TESTED'
       - name: Converter ELF em EBOOT de diagnostico sem jogo
         shell: bash
         run: |
           set -euo pipefail
           sdk="$OO_PS4_TOOLCHAIN"
-          test -s "$RUNNER_TEMP/lingshu206-diagnostic.elf"
+          test -s "$RUNNER_TEMP/lingshu207-diagnostic.elf"
           test -x "$sdk/bin/linux/create-fself"
           "$sdk/bin/linux/create-fself" \
-            -in="$RUNNER_TEMP/lingshu206-diagnostic.elf" \
-            -out="$RUNNER_TEMP/lingshu206-diagnostic.oelf" \
+            -in="$RUNNER_TEMP/lingshu207-diagnostic.elf" \
+            -out="$RUNNER_TEMP/lingshu207-diagnostic.oelf" \
             --eboot "$RUNNER_TEMP/eboot.bin" \
             --paid 0x3800000000000011
           test -s "$RUNNER_TEMP/eboot.bin"
-          test -s "$RUNNER_TEMP/lingshu206-diagnostic.oelf"
+          test -s "$RUNNER_TEMP/lingshu207-diagnostic.oelf"
           ( cd "$RUNNER_TEMP" && sha256sum eboot.bin > lingshu-eboot.sha256 )
           stat -c 'LINGSHU_DIAGNOSTIC_EBOOT_BYTES=%s' "$RUNNER_TEMP/eboot.bin"
           echo 'LINGSHU_DIAGNOSTIC_EBOOT=CREATED_NOT_PKG_NOT_TESTED_ON_PS4'
@@ -144,7 +144,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: LINGSHU207-FIVE-16M-SIMULTANEOUS-PS4-PKG-NO-GAME
+          name: LINGSHU207-FLEXIBLE-16K-MEMORY-PS4-PKG-NO-GAME
           path: |
             ${{ runner.temp }}/pkg-output/*.pkg
             ${{ runner.temp }}/diagnostic-pkg.sha256
@@ -157,7 +157,7 @@ jobs:
         with:
           name: LINGSHU207-ELF-NOT-EBOOT-NOT-PKG
           path: |
-            ${{ runner.temp }}/lingshu206-diagnostic.elf
-            ${{ runner.temp }}/lingshu206-diagnostic.sha256
+            ${{ runner.temp }}/lingshu207-diagnostic.elf
+            ${{ runner.temp }}/lingshu207-diagnostic.sha256
           if-no-files-found: error
           retention-days: 7
