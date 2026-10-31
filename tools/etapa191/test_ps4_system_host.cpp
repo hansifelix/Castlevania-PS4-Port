@@ -44,7 +44,7 @@ int main() {
     CHECK(touch_overlay(&shape,1)==0);++cases;
     CHECK(memguard_overlap_ns(123,456)==0);++cases;
     start_memory_guard();++cases;
-    std::puts("LINGSHU191_PS4_PLATFORM_SYSTEM_CONTRACTS=PASSED_17_CASES_NO_GPU_NO_GAME");
+    std::puts("LINGSHU191_PS4_PLATFORM_SYSTEM_CONTRACTS=PASSED_18_CASES_NO_GPU_NO_GAME");
     unlink((std::string(root)+"/file").c_str());
     rmdir(path.c_str());rmdir((std::string(root)+"/nested/a").c_str());
     rmdir((std::string(root)+"/nested").c_str());rmdir(root);
