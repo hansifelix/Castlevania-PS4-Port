@@ -33,7 +33,7 @@ void log_line(const char* line) { diagnostic = line ? line : ""; }
 extern "C" bool lingshu_ps4_guest_layout_valid();
 
 #define CHECK(condition) do { if (!(condition)) { \
-    std::fprintf(stderr, "LINGSHU178_FAILED line %d: %s; last=%s\\n", \
+    std::fprintf(stderr, "LINGSHU178_FAILED line %d: %s; last=%s\n", \
                  __LINE__, #condition, diagnostic.c_str()); return 1; } } while (0)
 
 int main() {
@@ -90,6 +90,6 @@ int main() {
 
     CHECK(accept()==0);
     CHECK(cases==11);
-    std::printf("LINGSHU178_GUEST_LAYOUT_HOST=PASSED_%d_CASES_NO_GAME\\n",cases);
+    std::printf("LINGSHU178_GUEST_LAYOUT_HOST=PASSED_%d_CASES_NO_GAME\n",cases);
     return 0;
 }
