@@ -10,6 +10,8 @@ on:
       - 'tools/etapa176/**'
       - 'tools/etapa177/**'
       - 'tools/etapa178/**'
+      - 'tools/etapa180/**'
+      - 'tools/etapa144/**'
       - 'tools/etapa179/**'
       - '.github/workflows/kazuma-atomic16-openorbis.yml'
   push:
@@ -22,6 +24,8 @@ on:
       - 'tools/etapa176/**'
       - 'tools/etapa177/**'
       - 'tools/etapa178/**'
+      - 'tools/etapa180/**'
+      - 'tools/etapa144/**'
       - 'tools/etapa179/**'
       - '.github/workflows/kazuma-atomic16-openorbis.yml'
 permissions:
