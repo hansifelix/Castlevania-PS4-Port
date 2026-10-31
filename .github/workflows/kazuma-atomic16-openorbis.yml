@@ -112,6 +112,55 @@ jobs:
           git clone -q --filter=blob:none https://github.com/SwonDev/cstlvnia-blmont-to-macos.git "$RUNNER_TEMP/upstream"
           git -C "$RUNNER_TEMP/upstream" checkout --detach 4043f21bb4f656d34cd17ba070238c7728d00631
           test "$(git -C "$RUNNER_TEMP/upstream" rev-parse HEAD)" = 4043f21bb4f656d34cd17ba070238c7728d00631
+          mkdir -p "$RUNNER_TEMP/compat/nx"
+          cat > "$RUNNER_TEMP/compat/nx/lingshu_cpu_compat.h" <<'CPP'
+          #pragma once
+          #include <cstdint>
+          #include <type_traits>
+          namespace lingshu_cpu_compat {
+          template <typename To, typename From>
+          constexpr To bit_cast(const From& from) noexcept {
+             static_assert(sizeof(To)==sizeof(From));
+             static_assert(std::is_trivially_copyable_v<To> && std::is_trivially_copyable_v<From>);
+             return __builtin_bit_cast(To,from);
+          }
+          template <typename T>
+          constexpr T rotr(T value,int shift) noexcept {
+             static_assert(std::is_unsigned_v<T>);
+             constexpr int bits=int(sizeof(T)*8);
+             int n=((shift%bits)+bits)%bits;
+             return n ? T((value>>n)|(value<<(bits-n))) : value;
+          }
+          template <typename T>
+          constexpr int countl_zero(T value) noexcept {
+            static_assert(std::is_unsigned_v<T>);
+            constexpr int bits=int(sizeof(T)*8);
+            if (value==0) return bits;
+            if constexpr (sizeof(T)<=4)
+              return __builtin_clz(static_cast<unsigned>(value))-(32-bits);
+            else
+              return __builtin_clzll(static_cast<unsigned long long>(value));
+          }
+          template <typename T>
+          constexpr int popcount(T value) noexcept {
+            static_assert(std::is_unsigned_v<T>);
+            if constexpr (sizeof(T)<=4)
+              return __builtin_popcount(static_cast<unsigned>(value));
+            else
+              return __builtin_popcountll(static_cast<unsigned long long>(value));
+          }
+          }
+          CPP
+          python3 - "$RUNNER_TEMP/upstream/runtime/include/nx/cpu.h" "$RUNNER_TEMP/compat/nx/cpu.h" <<'PY_CPU'
+          from pathlib import Path
+          import sys
+          s=Path(sys.argv[1]).read_text(encoding="utf-8")
+          assert s.count("#include <bit>")==1 and s.count("std::bit_cast")>=5 and s.count("std::rotr(")==2
+          s=s.replace("#include <bit>", '#include "lingshu_cpu_compat.h"')
+          s=s.replace("std::bit_cast","lingshu_cpu_compat::bit_cast")
+          s=s.replace("std::rotr(","lingshu_cpu_compat::rotr(")
+          Path(sys.argv[2]).write_text(s,encoding="utf-8")
+          PY_CPU
           cat > "$RUNNER_TEMP/boot-probe.cpp" <<'CPP'
           #include <nx/module.h>
           #include <string>
@@ -139,12 +188,12 @@ jobs:
           clang++-18 --target=x86_64-pc-freebsd12-elf -std=c++20 -O2 -g0 -fPIC \
             -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
             -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
-            -I"$RUNNER_TEMP/upstream/runtime/include" -I"$RUNNER_TEMP/upstream/runtime/src" \
+            -I"$RUNNER_TEMP/compat" -I"$RUNNER_TEMP/upstream/runtime/include" -I"$RUNNER_TEMP/upstream/runtime/src" \
             -c tools/etapa172/ps4_boot_images_preflight.cpp -o "$RUNNER_TEMP/boot-preflight-ps4.o"
           clang++-18 --target=x86_64-pc-freebsd12-elf -std=c++20 -O2 -g0 -fPIC \
             -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
             -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
-            -I"$RUNNER_TEMP/upstream/runtime/include" -I"$RUNNER_TEMP/upstream/runtime/src" \
+            -I"$RUNNER_TEMP/compat" -I"$RUNNER_TEMP/upstream/runtime/include" -I"$RUNNER_TEMP/upstream/runtime/src" \
             -c "$RUNNER_TEMP/boot-probe.cpp" -o "$RUNNER_TEMP/boot-probe-ps4.o"
           llvm-nm-18 --defined-only "$RUNNER_TEMP/boot-preflight-ps4.o" \
             | grep -E ' [Tt] lingshu_ps4_boot_images_present$'
