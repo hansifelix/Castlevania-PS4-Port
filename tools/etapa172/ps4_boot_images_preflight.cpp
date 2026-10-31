@@ -30,8 +30,7 @@ bool patch_address_valid(const nx::ModuleInfo& module, uint64_t offset,
     // Mirror nx::load_modules' AOT patch contract without overflowing any end address.
     if ((offset & 3) || module.text > UINT64_MAX - module.text_size) return false;
     const uint64_t text_end = module.text + module.text_size;
-    return offset >= module.text && offset <= text_end &&
-           offset <= image_length && text_end >= 4 &&
+    return offset >= module.text && text_end >= 4 && image_length >= 4 &&
            offset <= text_end - 4 && offset <= image_length - 4;
 }
 } // namespace
@@ -103,7 +102,6 @@ extern "C" bool lingshu_ps4_boot_images_present() {
             }
         }
         std::fclose(f);
-
     }
 
     nx::plat::log_line("LINGSHU172: all three AOT module lengths and version patch opcodes verified; starting real nx::boot");
