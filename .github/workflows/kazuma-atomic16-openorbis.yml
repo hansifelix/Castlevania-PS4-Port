@@ -10,6 +10,7 @@ on:
       - 'tools/etapa176/**'
       - 'tools/etapa177/**'
       - 'tools/etapa178/**'
+      - 'tools/etapa179/**'
       - '.github/workflows/kazuma-atomic16-openorbis.yml'
   push:
     branches: [main]
@@ -21,6 +22,7 @@ on:
       - 'tools/etapa176/**'
       - 'tools/etapa177/**'
       - 'tools/etapa178/**'
+      - 'tools/etapa179/**'
       - '.github/workflows/kazuma-atomic16-openorbis.yml'
 permissions:
   contents: read
@@ -45,6 +47,11 @@ jobs:
         run: |
           set -euo pipefail
           bash tools/etapa175/test_memory_host.sh
+      - name: Testar correção real da memória com 13 casos e 5000 operações
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tools/etapa179/test_memory_179.sh
       - name: Instalar clang 18 e SDK OpenOrbis v0.5.4 (SHA fixado)
         shell: bash
         run: |
