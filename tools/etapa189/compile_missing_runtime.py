@@ -40,7 +40,7 @@ def run() -> None:
     cmake = args.upstream / "CMakeLists.txt"
     original, duplicated = runtime_manifest(cmake.read_text(encoding="utf-8"))
     missing = [x for x in original if x not in BASELINE_SOURCES]
-    if len(original) != 86 or len(missing) != 67:
+    if len(original) != 87 or len(missing) != 68:
         raise RuntimeError(
             f"Unexpected runtime manifest: total={len(original)} missing={len(missing)}"
         )
@@ -80,7 +80,7 @@ def run() -> None:
         subprocess.run(cmd, check=True, timeout=100)
         if output.stat().st_size == 0:
             raise RuntimeError("Empty PS4 object for " + src)
-    print("LINGSHU189_FULL_86_RUNTIME_OBJECTS_COMPILED_67_NEW_NO_GAME", flush=True)
+    print("LINGSHU189_FULL_87_RUNTIME_OBJECTS_COMPILED_68_NEW_NO_GAME", flush=True)
 
 
 if __name__ == "__main__":
