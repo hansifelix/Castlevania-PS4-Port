@@ -87,6 +87,19 @@ jobs:
             --out src/vulkan/util/vk_struct_type_cast.h
           test -s src/vulkan/util/vk_struct_type_cast.h
           echo 'KAZUMA186_VULKAN_STRUCT_CAST=GENERATED_FROM_PINNED_VK_XML'
+          packet_src=(
+            src/amd/packets/cp_pm4_table_data_gfx11.json
+            src/amd/packets/pm4_it_opcodes_gfx11.h
+            src/amd/packets/cp_pm4_table_data_gfx12.json
+            src/amd/packets/pm4_it_opcodes_gfx12.h
+          )
+          for gen in gfx11 gfx12; do
+            python3 src/amd/packets/parse_cp_pm4_table_data_json.py \
+              "${packet_src[@]}" "$gen" packets_h \
+              > "src/amd/common/amd_cp_packets_$gen.h"
+            test -s "src/amd/common/amd_cp_packets_$gen.h"
+          done
+          echo 'KAZUMA186_AMD_GFX11_12_PACKET_HEADERS=GENERATED_FROM_VENDOR_JSON'
           # Compile the actual shader frontend before the full Mesa library.
           timeout 180s make -j2 -f Makefile.orbis \
             CC=clang-18 CXX=clang++-18 AR=llvm-ar-18 \
