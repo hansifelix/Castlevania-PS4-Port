@@ -12,6 +12,7 @@ on:
       - 'tools/etapa178/**'
       - 'tools/etapa180/**'
       - 'tools/etapa181/**'
+      - 'tools/etapa182/**'
       - 'tools/etapa162/**'
       - 'tools/etapa144/**'
       - 'tools/etapa179/**'
@@ -28,6 +29,7 @@ on:
       - 'tools/etapa178/**'
       - 'tools/etapa180/**'
       - 'tools/etapa181/**'
+      - 'tools/etapa182/**'
       - 'tools/etapa162/**'
       - 'tools/etapa144/**'
       - 'tools/etapa179/**'
@@ -211,6 +213,17 @@ jobs:
           "$RUNNER_TEMP/guest-layout-host"
           bash tools/etapa180/test_boot_log_host.sh "$RUNNER_TEMP/upstream/runtime/src"
           bash tools/etapa181/test_boot_stage.sh "$RUNNER_TEMP/upstream/runtime/src"
+          # Critical integration: the upstream nx::memory_init() itself now
+          # reserves the full guest virtual-address layout via our real POSIX
+          # adapter. This runs on Linux, NOT console hardware.
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -pthread \
+            -I"$RUNNER_TEMP/upstream/runtime/include" \
+            -I"$RUNNER_TEMP/upstream/runtime/src" \
+            "$RUNNER_TEMP/upstream/runtime/src/memory.cpp" \
+            tools/etapa146/platform_ps4_virtual_memory.cpp \
+            tools/etapa182/test_upstream_memory_init.cpp \
+            -o "$RUNNER_TEMP/real-upstream-memory-init"
+          timeout 35s "$RUNNER_TEMP/real-upstream-memory-init"
           cat > "$RUNNER_TEMP/boot-probe.cpp" <<'CPP'
           #include <nx/module.h>
           #include <string>
