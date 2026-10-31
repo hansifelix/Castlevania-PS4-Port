@@ -1,0 +1,395 @@
+name: Kazuma - compilacao do driver Vulkan real PS4 (sem jogo)
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/kazuma-vulkan-ps4-renderer-compile.yml'
+      - 'tools/etapa183/**'
+      - 'tools/etapa184/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kazuma-vulkan-ps4-renderer-compile.yml'
+      - 'tools/etapa183/**'
+      - 'tools/etapa184/**'
+permissions:
+  contents: read
+jobs:
+  vulkan-ps4-openorbis:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar compilador e SDK OpenOrbis fixado
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang-18 llvm-18 lld-18 curl
+          mkdir -p "$RUNNER_TEMP/sdk" "$RUNNER_TEMP/dl"
+          curl -fLsS --retry 3 --retry-delay 3 \
+            https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz \
+            -o "$RUNNER_TEMP/dl/sdk.tar.gz"
+          echo '3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526  '"$RUNNER_TEMP/dl/sdk.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/dl/sdk.tar.gz" -C "$RUNNER_TEMP/sdk"
+          sdk="$(find "$RUNNER_TEMP/sdk" -name link.x -type f -print -quit)"
+          test -n "$sdk"
+          echo "PS4SDK=$(dirname "$sdk")" >> "$GITHUB_ENV"
+      - name: Obter fontES publicas do driver Vulkan e GNM em revisoes fixadas
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/gpu"
+          git clone -q --filter=blob:none https://github.com/PS4-OpenGNM/vulkan-ps4.git "$RUNNER_TEMP/gpu/vulkan-ps4"
+          git -C "$RUNNER_TEMP/gpu/vulkan-ps4" checkout --detach f4d940b723771b3fe637e8ac0704bb5d6ab19622
+          git clone -q --filter=blob:none https://github.com/PS4-OpenGNM/opengnm.git "$RUNNER_TEMP/gpu/opengnm"
+          git -C "$RUNNER_TEMP/gpu/opengnm" checkout --detach 4b295ca54c82c83acf308d1c646a2dfa9ae57350
+          git clone -q --filter=blob:none https://github.com/KhronosGroup/Vulkan-Headers.git "$RUNNER_TEMP/gpu/Vulkan-Headers"
+          git -C "$RUNNER_TEMP/gpu/Vulkan-Headers" checkout --detach 9fbc2a782ee3f8a4db64e7d991e23da75e893f44
+          test "$(git -C "$RUNNER_TEMP/gpu/vulkan-ps4" rev-parse HEAD)" = f4d940b723771b3fe637e8ac0704bb5d6ab19622
+          test "$(git -C "$RUNNER_TEMP/gpu/opengnm" rev-parse HEAD)" = 4b295ca54c82c83acf308d1c646a2dfa9ae57350
+          test "$(git -C "$RUNNER_TEMP/gpu/Vulkan-Headers" rev-parse HEAD)" = 9fbc2a782ee3f8a4db64e7d991e23da75e893f44
+          echo 'KAZUMA_GPU_UPSTREAM=PINNED_PUBLIC_SOURCES_NO_GAME'
+      - name: Compilar codigo Vulkan REAL com alvo PS4 e apontar bloqueios de superficie
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$PS4SDK"
+          root="$RUNNER_TEMP/gpu"
+          driver="$root/vulkan-ps4"
+          mkdir -p "$RUNNER_TEMP/gpu-objects"
+          for src in vk_ps4_entry.c vk_ps4_swapchain.c; do
+            clang-18 --target=x86_64-pc-freebsd12-elf -std=c11 -O0 -g0 -fPIC \
+              -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -DORBIS -D__ORBIS__ -D__PS4__ -DVK_USE_PLATFORM_PS4 \
+              -isysroot "$sdk" -isystem "$sdk/include" \
+              -I"$driver/include" \
+              -I"$root/Vulkan-Headers/include" \
+              -I"$root/opengnm/include" \
+              -c "$driver/src/$src" -o "$RUNNER_TEMP/gpu-objects/$src.o"
+          done
+          llvm-nm-18 --defined-only "$RUNNER_TEMP/gpu-objects/vk_ps4_entry.c.o" \
+            | grep -E ' [Tt] vk_icdNegotiateLoaderICDInterfaceVersion$'
+          llvm-nm-18 --defined-only "$RUNNER_TEMP/gpu-objects/vk_ps4_swapchain.c.o" \
+            | grep -E ' [Tt] vk_ps4_CreateSwapchainKHR$'
+          echo 'KAZUMA_GPU_REAL_VULKAN_SOURCE_PS4_OBJECTS=COMPILED_NO_RENDERING'
+          # The game requires a real VkSurfaceKHR and WSI queries. The pinned
+          # Vulkan driver advertises VK_KHR_surface but does not dispatch these.
+          for sym in vkGetPhysicalDeviceSurfaceSupportKHR vkGetPhysicalDeviceSurfaceCapabilitiesKHR \
+                     vkGetPhysicalDeviceSurfaceFormatsKHR vkGetPhysicalDeviceSurfacePresentModesKHR \
+                     vkDestroySurfaceKHR; do
+            if grep -Eq "ENTRY\\($sym\\)" "$driver/src/vk_ps4_dispatch.c"; then
+              echo "KAZUMA_GPU_WSI_DRIVER_HAS_$sym=YES"
+            else
+              echo "KAZUMA_GPU_WSI_DRIVER_HAS_$sym=NO_MUST_IMPLEMENT"
+            fi
+          done
+          echo 'KAZUMA_GPU_FIRST_FRAME=NOT_PROVEN'
+      - name: Compilar OpenGNM completo para PS4 e conectar ao driver Vulkan
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/gpu"
+          sdk="$PS4SDK"
+          cp "$root/opengnm/config.orbis.mak" "$root/opengnm/config.mak"
+          make -C "$root/opengnm" -f Makefile lib \
+            OO_PS4_TOOLCHAIN="$sdk" \
+            CC=clang-18 AR=llvm-ar-18
+          test -s "$root/opengnm/libopengnm.a"
+          count="$(llvm-ar-18 t "$root/opengnm/libopengnm.a" | wc -l)"
+          test "$count" -ge 25
+          printf 'KAZUMA_OPENGNM_REAL_ORBIS_ARCHIVE_OBJECTS=%s\n' "$count"
+          # Link every OpenGNM component into a relocatable PS4 object, not a
+          # synthetic triangle. This checks object architecture/compatibility.
+          ld.lld-18 -m elf_x86_64 -r -o "$RUNNER_TEMP/gpu-objects/opengnm-all-ps4.o" \
+            --whole-archive "$root/opengnm/libopengnm.a" --no-whole-archive
+          readelf -h "$RUNNER_TEMP/gpu-objects/opengnm-all-ps4.o" \
+            | grep -E 'Class:|Machine:'
+          llvm-nm-18 --defined-only "$RUNNER_TEMP/gpu-objects/opengnm-all-ps4.o" \
+            > "$RUNNER_TEMP/gpu-objects/opengnm-exported-symbols.txt"
+          grep -E -m 7 ' [Tt] sceGnm' "$RUNNER_TEMP/gpu-objects/opengnm-exported-symbols.txt"
+          echo 'KAZUMA_OPENGNM_ALL_SOURCES_CROSS_COMPILED=PASSED_PS4_OBJECT_NOT_EXECUTED'
+      - name: Exercitar ponte Vulkan WSI REAL e compilar para PS4
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/gpu"
+          sdk="$PS4SDK"
+          git clone -q --filter=blob:none https://github.com/SwonDev/cstlvnia-blmont-to-macos.git "$root/upstream"
+          git -C "$root/upstream" checkout --detach 4043f21bb4f656d34cd17ba070238c7728d00631
+          test "$(git -C "$root/upstream" rev-parse HEAD)" = 4043f21bb4f656d34cd17ba070238c7728d00631
+          # This tests PRODUCTION code's exact platform.h contract on host.
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -pthread \
+            -I"$root/upstream/runtime/src" \
+            -I"$root/Vulkan-Headers/include" \
+            tools/etapa184/platform_ps4_vulkan_wsi.cpp \
+            tools/etapa184/test_ps4_vulkan_wsi_host.cpp \
+            -o "$RUNNER_TEMP/vulkan-wsi-host"
+          "$RUNNER_TEMP/vulkan-wsi-host"
+          # Production PS4 bridge compiled against pinned Vulkan-Headers and
+          # original platform.h; no fabricated swapchain or Castlevania image.
+          clang++-18 --target=x86_64-pc-freebsd12-elf -std=c++20 -O0 -g0 -fPIC \
+            -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
+            -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
+            -I"$root/upstream/runtime/src" -I"$root/Vulkan-Headers/include" \
+            -c tools/etapa184/platform_ps4_vulkan_wsi.cpp \
+            -o "$RUNNER_TEMP/gpu-objects/kazuma-vulkan-wsi-184.o"
+          # Same PS4 target object format as real Vulkan VideoOut driver.
+          ld.lld-18 -r -o "$RUNNER_TEMP/gpu-objects/kazuma-gpu-wsi-bundle.o" \
+            "$RUNNER_TEMP/gpu-objects/kazuma-vulkan-wsi-184.o" \
+            "$RUNNER_TEMP/gpu-objects/vk_ps4_entry.c.o" \
+            "$RUNNER_TEMP/gpu-objects/vk_ps4_swapchain.c.o"
+          llvm-nm-18 --defined-only "$RUNNER_TEMP/gpu-objects/kazuma-gpu-wsi-bundle.o" \
+            | grep -F 'lingshu_ps4_vkGetInstanceProcAddr'
+
+          echo 'KAZUMA_REAL_VULKAN_WSI_PS4_RELOCATABLE=LINKED_NO_GAME_NO_HARDWARE_TEST'
+      - name: Compilar TODO driver Vulkan e vincular com OpenGNM e ponte WSI
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/gpu"
+          sdk="$PS4SDK"
+          driver="$root/vulkan-ps4"
+          mkdir -p "$RUNNER_TEMP/gpu-full"
+          # ALL 21 original Vulkan ICD C units. Shader compiler libpsbc is
+          # intentionally not enabled in this check: no claim of rendering.
+          sources=(
+            vk_ps4_entry vk_ps4_dispatch vk_ps4_entrypoints vk_ps4_instance
+            vk_ps4_device vk_ps4_format vk_ps4_memory vk_ps4_buffer
+            vk_ps4_image vk_ps4_render_pass vk_ps4_shader vk_ps4_pipeline
+            vk_ps4_descriptor vk_ps4_command vk_ps4_swapchain vk_ps4_queue
+            vk_ps4_sync vk_ps4_query vk_ps4_stubs vk_ps4_vulkan11 vk_ps4_log
+          )
+          for base in "${sources[@]}"; do
+            clang-18 --target=x86_64-pc-freebsd12-elf -std=c11 -O0 -g0 -fPIC \
+              -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
+              -DORBIS -D__ORBIS__ -D__PS4__ -DVK_USE_PLATFORM_PS4 \
+              -isysroot "$sdk" -isystem "$sdk/include" \
+              -I"$driver/include" -I"$root/opengnm/include" \
+              -I"$root/Vulkan-Headers/include" \
+              -c "$driver/src/$base.c" -o "$RUNNER_TEMP/gpu-full/$base.o"
+          done
+          llvm-ar-18 rcs "$RUNNER_TEMP/gpu-full/libvulkan_ps4.a" "$RUNNER_TEMP/gpu-full/"*.o
+          test "$(llvm-ar-18 t "$RUNNER_TEMP/gpu-full/libvulkan_ps4.a" | wc -l)" -eq 21
+          echo 'KAZUMA_VULKAN_FULL_DRIVER_C_UNITS=21_COMPILED_NO_PSBC'
+          ld.lld-18 -m elf_x86_64 -r -o "$RUNNER_TEMP/gpu-full/kazuma-gnm-vulkan-wsi-all.o" \
+            "$RUNNER_TEMP/gpu-objects/kazuma-vulkan-wsi-184.o" \
+            --whole-archive "$RUNNER_TEMP/gpu-full/libvulkan_ps4.a" \
+            "$root/opengnm/libopengnm.a" --no-whole-archive
+          readelf -h "$RUNNER_TEMP/gpu-full/kazuma-gnm-vulkan-wsi-all.o" \
+            | grep -E 'Class:|Machine:'
+          llvm-nm-18 --defined-only "$RUNNER_TEMP/gpu-full/kazuma-gnm-vulkan-wsi-all.o" \
+            > "$RUNNER_TEMP/gpu-full/symbols.txt"
+          for name in sceGnmCmdInit vk_ps4_CreateSwapchainKHR lingshu_ps4_vkGetInstanceProcAddr; do
+            grep -F "$name" "$RUNNER_TEMP/gpu-full/symbols.txt"
+          done
+          echo 'KAZUMA_OPENGNM_VULKAN_WSI_FULL_RELOCATABLE=PASSED_NO_GAME_NO_SHADERS_NO_HARDWARE'
+
+
+      - name: Compilar ponte Vulkan ORIGINAL da engine e conectar com ICD PS4
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/gpu"
+          sdk="$PS4SDK"
+          upstream="$root/upstream"
+          mkdir -p "$RUNNER_TEMP/gpu-bridge" "$RUNNER_TEMP/nx-cpu-compat/nx"
+          # The pinned upstream uses C++20 std::bit_cast, not provided by
+          # OpenOrbis libc++ v0.5.4. Reuse the same compat patch as private AOT.
+          cat > "$RUNNER_TEMP/nx-cpu-compat/nx/lingshu_cpu_compat.h" <<'CPP'
+          #pragma once
+          #include <cstdint>
+          #include <type_traits>
+          namespace lingshu_cpu_compat {
+          template <typename To,typename From>
+          constexpr To bit_cast(const From& from) noexcept {
+            static_assert(sizeof(To)==sizeof(From));
+            static_assert(std::is_trivially_copyable_v<To> && std::is_trivially_copyable_v<From>);
+            return __builtin_bit_cast(To,from);
+          }
+          template <typename T> constexpr T rotr(T v,int shift) noexcept {
+            static_assert(std::is_unsigned_v<T>);
+            constexpr int bits=int(sizeof(T)*8);
+            int n=((shift%bits)+bits)%bits;
+            return n ? T((v>>n)|(v<<(bits-n))) : v;
+          }
+          }
+          CPP
+          python3 - "$upstream/runtime/include/nx/cpu.h" \
+                 "$RUNNER_TEMP/nx-cpu-compat/nx/cpu.h" <<'PY_CPU'
+          from pathlib import Path
+          import sys
+          data=Path(sys.argv[1]).read_text(encoding="utf-8")
+          assert data.count("#include <bit>")==1 and data.count("std::bit_cast")>=5 and data.count("std::rotr(")==2
+          data=data.replace("#include <bit>",'#include "lingshu_cpu_compat.h"')
+          data=data.replace("std::bit_cast","lingshu_cpu_compat::bit_cast")
+          data=data.replace("std::rotr(","lingshu_cpu_compat::rotr(")
+          Path(sys.argv[2]).write_text(data,encoding="utf-8")
+          PY_CPU
+          for name in vk_bridge vk_swapchain vk_present vk_gen hle_vi; do
+            echo "KAZUMA_REAL_NX_VULKAN_BRIDGE_COMPILING=$name"
+            clang++-18 --target=x86_64-pc-freebsd12-elf \
+              -std=c++20 -O0 -g0 -fPIC -ferror-limit=8 \
+              -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
+              -isysroot "$sdk" -isystem "$sdk/include" \
+              -isystem "$sdk/include/c++/v1" \
+              -I"$RUNNER_TEMP/nx-cpu-compat" \
+              -I"$upstream/runtime/include" -I"$upstream/runtime/src" \
+              -I"$upstream/games/castlevania" \
+              -I"$root/Vulkan-Headers/include" \
+              -c "$upstream/runtime/src/$name.cpp" \
+              -o "$RUNNER_TEMP/gpu-bridge/$name.o"
+          done
+          ld.lld-18 -m elf_x86_64 -r -o "$RUNNER_TEMP/gpu-bridge/real-nx-vulkan-and-gpu.o" \
+            "$RUNNER_TEMP/gpu-bridge/"*.o \
+            "$RUNNER_TEMP/gpu-full/kazuma-gnm-vulkan-wsi-all.o"
+          readelf -h "$RUNNER_TEMP/gpu-bridge/real-nx-vulkan-and-gpu.o" \
+            | grep -E 'Class:|Machine:'
+          llvm-nm-18 -C --defined-only "$RUNNER_TEMP/gpu-bridge/real-nx-vulkan-and-gpu.o" \
+            > "$RUNNER_TEMP/gpu-bridge/bridge-defined.txt"
+          grep -F -m 1 'nx::vk::' "$RUNNER_TEMP/gpu-bridge/bridge-defined.txt"
+          grep -F 'vk_ps4_CreateSwapchainKHR' "$RUNNER_TEMP/gpu-bridge/bridge-defined.txt"
+          echo 'KAZUMA_NX_ORIGINAL_VULKAN_BRIDGE_PLUS_VI_HLE_PLUS_ICD=RELOCATABLE_OK_NO_GAME_NO_PS4_EXECUTION'
+
+      - name: Reconstruir os 68 arquivos ORIGINAIS de runtime ausentes na engine PS4
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/gpu"
+          python3 tools/etapa189/compile_missing_runtime.py \
+            --upstream "$root/upstream" \
+            --sdk "$PS4SDK" \
+            --compat "$RUNNER_TEMP/nx-cpu-compat" \
+            --vulkan "$root/Vulkan-Headers" \
+            --out "$RUNNER_TEMP/ps4-runtime-full" \
+            --include-baseline
+          count="$(find "$RUNNER_TEMP/ps4-runtime-full" -maxdepth 1 -name 'RT-*.o' -type f | wc -l)"
+          test "$count" -eq 82
+          # All original services/NVN modules must coexist with the genuine
+          # upstream bridge, GNM driver and VideoOut surface adapter.
+          ld.lld-18 -m elf_x86_64 -r \
+            -o "$RUNNER_TEMP/ps4-runtime-full-plus-vulkan.o" \
+            "$RUNNER_TEMP/ps4-runtime-full/"*.o \
+            "$RUNNER_TEMP/gpu-bridge/real-nx-vulkan-and-gpu.o"
+          readelf -h "$RUNNER_TEMP/ps4-runtime-full-plus-vulkan.o" \
+            | grep -E 'Class:|Machine:'
+          echo 'KAZUMA190_87_ORIGINAL_RUNTIME_PS4_OBJECTS_PLUS_GPU=RELOCATABLE_OK_NO_GAME'
+          # The 82 compiled units plus 5 existing engine bridge files = 87.
+          # Requiring all their symbols to coexist catches duplicate exports.
+          # ld.lld -r is NOT the final link and unresolveds are still possible.
+          llvm-nm-18 -C --undefined-only \
+            "$RUNNER_TEMP/ps4-runtime-full-plus-vulkan.o" \
+            > "$RUNNER_TEMP/ps4-runtime-undefined-all.txt"
+          grep -E ' [Uu] ' "$RUNNER_TEMP/ps4-runtime-undefined-all.txt" \
+            | sed -E 's/^.* [Uu] //' | sort -u \
+            > "$RUNNER_TEMP/ps4-runtime-undefined-unique.txt" || true
+          python3 - "$RUNNER_TEMP/ps4-runtime-undefined-unique.txt" <<'PY_AUDIT'
+          import sys
+          from pathlib import Path
+          syms=Path(sys.argv[1]).read_text().splitlines()
+          categories={
+              "NX_RUNTIME":sum(x.startswith("nx::") and not x.startswith("nx::plat::") for x in syms),
+              "NX_PLATFORM":sum(x.startswith("nx::plat::") for x in syms),
+              "SCE_NATIVE":sum(x.startswith("sce") for x in syms),
+              "GUEST_AOT":sum(x.startswith(("main_", "sdk_", "subsdk0_")) for x in syms),
+              "VK_LOADER":sum("vkGetInstanceProcAddr" in x for x in syms),
+              "TOTAL":len(syms),
+          }
+          for k,v in categories.items():print(f"KAZUMA190_UNRESOLVED_{k}={v}")
+          print("KAZUMA190_87_UPSTREAM_RUNTIME_LINK_AUDITED=RELOCATABLE_ONLY_NO_EBOOT")
+          PY_AUDIT
+
+      - name: Validar sistema de arquivos PS4, geometria de tela e contratos do console
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/gpu"
+          sdk="$PS4SDK"
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror \
+            -I"$root/upstream/runtime/src" \
+            tools/etapa191/platform_ps4_system_contract.cpp \
+            tools/etapa191/test_ps4_system_host.cpp \
+            -o "$RUNNER_TEMP/ps4-system-host"
+          "$RUNNER_TEMP/ps4-system-host"
+          clang++-18 --target=x86_64-pc-freebsd12-elf \
+            -std=c++20 -O0 -g0 -fPIC \
+            -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
+            -isysroot "$sdk" -isystem "$sdk/include" \
+            -isystem "$sdk/include/c++/v1" \
+            -I"$root/upstream/runtime/src" \
+            -c tools/etapa191/platform_ps4_system_contract.cpp \
+            -o "$RUNNER_TEMP/ps4-system-contract-191.o"
+          llvm-nm-18 -C --defined-only "$RUNNER_TEMP/ps4-system-contract-191.o" \
+            > "$RUNNER_TEMP/ps4-system-symbols.txt"
+          grep -F -m 1 'nx::plat::make_dirs' "$RUNNER_TEMP/ps4-system-symbols.txt"
+          echo 'LINGSHU191_REAL_PS4_PLATFORM_SYSTEM=HOST_TESTED_AND_OPENORBIS_COMPILED_NO_GAME'
+
+      - name: Provar 87 fontes originais COM entrada publica do jogo sem duplicar objetos
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/gpu"
+          sdk="$PS4SDK"
+          # The previous step already linked 82 source objects + 5 native
+          # bridge source objects. DO NOT compile those 14 baseline files again.
+          clang++-18 --target=x86_64-pc-freebsd12-elf \
+            -std=c++20 -O0 -g0 -fPIC -ferror-limit=10 \
+            -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
+            -isysroot "$sdk" -isystem "$sdk/include" \
+            -isystem "$sdk/include/c++/v1" \
+            -I"$RUNNER_TEMP/nx-cpu-compat" \
+            -I"$root/upstream/runtime/include" \
+            -I"$root/upstream/runtime/src" \
+            -I"$root/upstream/games/castlevania" \
+            -I"$root/Vulkan-Headers/include" -include stdlib.h \
+            -c "$root/upstream/games/castlevania/game.cpp" \
+            -o "$RUNNER_TEMP/kazuma-public-game-entry.o"
+          ld.lld-18 -m elf_x86_64 -r \
+            -o "$RUNNER_TEMP/full-runtime-gpu-with-game-entry.o" \
+            "$RUNNER_TEMP/ps4-runtime-full-plus-vulkan.o" \
+            "$RUNNER_TEMP/kazuma-public-game-entry.o"
+          readelf -h "$RUNNER_TEMP/full-runtime-gpu-with-game-entry.o" \
+            | grep -E 'Class:|Machine:'
+          llvm-nm-18 -C --defined-only \
+            "$RUNNER_TEMP/full-runtime-gpu-with-game-entry.o" \
+            > "$RUNNER_TEMP/full-runtime-defined.txt"
+          grep -F -m 1 'nx::boot()' "$RUNNER_TEMP/full-runtime-defined.txt"
+          grep -F -m 1 'nx::memory_init()' "$RUNNER_TEMP/full-runtime-defined.txt"
+          grep -F -m 1 'vk_ps4_CreateSwapchainKHR' "$RUNNER_TEMP/full-runtime-defined.txt"
+          echo 'KAZUMA190_ALL_87_RUNTIME_PLUS_GAME_ENTRY_PLUS_GNM_VULKAN=RELOCATABLE_LINKED_NO_AOT_NO_HARDWARE'
+
+      - name: Cruzar engine COMPLETA com adaptadores PS4 de producao e auditar ABI
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/gpu"
+          sdk="$PS4SDK"
+          mkdir -p "$RUNNER_TEMP/adapter-audit192"
+          for src in \
+            tools/etapa144/platform_ps4_posix_core.cpp \
+            tools/etapa146/platform_ps4_virtual_memory.cpp \
+            tools/etapa191/platform_ps4_system_contract.cpp; do
+            base="$(basename "$src" .cpp)"
+            clang++-18 --target=x86_64-pc-freebsd12-elf \
+              -std=c++20 -O0 -g0 -fPIC -ferror-limit=10 \
+              -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
+              -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
+              -I"$root/upstream/runtime/src" \
+              -c "$src" -o "$RUNNER_TEMP/adapter-audit192/$base.o"
+          done
+          # Real engine/runtime already contains all 87 original sources +
+          # game.cpp, OpenGNM, ICD, and WSI. These are production adapters.
+          ld.lld-18 -m elf_x86_64 -r \
+            -o "$RUNNER_TEMP/adapter-audit192/engine-plus-real-platform.o" \
+            "$RUNNER_TEMP/full-runtime-gpu-with-game-entry.o" \
+            "$RUNNER_TEMP/adapter-audit192/"*.o
+          llvm-nm-18 -C --defined-only \
+            "$RUNNER_TEMP/adapter-audit192/engine-plus-real-platform.o" \
+            > "$RUNNER_TEMP/adapter-audit192/defined.txt"
+          llvm-nm-18 -C --undefined-only \
+            "$RUNNER_TEMP/adapter-audit192/engine-plus-real-platform.o" \
+            > "$RUNNER_TEMP/adapter-audit192/unresolved.txt"
+          python3 tools/etapa192/audit_real_platform_symbols.py \
+            "$RUNNER_TEMP/adapter-audit192/defined.txt" \
+            "$RUNNER_TEMP/adapter-audit192/unresolved.txt"
+          echo 'KAZUMA192_REAL_87_RUNTIME_PLUS_3_PS4_ADAPTERS=LINKED_WITH_DIAGNOSTICS_NO_AOT_NO_HARDWARE'
+
