@@ -76,5 +76,5 @@ int main() {
     CHECK(nx::plat::vulkan_create_surface(instance,win,&raw,nullptr)==VK_SUCCESS);
     nx::plat::release_window(win);
     CHECK(!g_visible);
-    std::puts("LINGSHU184_PS4_VULKAN_WSI_HOST=PASSED_24_CONTRACTS_NO_GPU_NO_GAME");
+    std::puts("LINGSHU184_PS4_VULKAN_WSI_HOST=PASSED_28_CONTRACTS_NO_GPU_NO_GAME");
 }
