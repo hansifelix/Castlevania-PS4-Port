@@ -298,36 +298,36 @@ jobs:
           print("KAZUMA190_87_UPSTREAM_RUNTIME_LINK_AUDITED=RELOCATABLE_ONLY_NO_EBOOT")
           PY_AUDIT
 
-      - name: Vincular todas as 87 fontes reais da engine com VideoOut e driver grafico
+      - name: Provar 87 fontes originais COM entrada publica do jogo sem duplicar objetos
         shell: bash
         run: |
           set -euo pipefail
           root="$RUNNER_TEMP/gpu"
-          mkdir -p "$RUNNER_TEMP/ps4-baseline190"
-          python3 tools/etapa190/compile_original_baseline.py \
-            --upstream "$root/upstream" \
-            --sdk "$PS4SDK" \
-            --compat "$RUNNER_TEMP/nx-cpu-compat" \
-            --vulkan "$root/Vulkan-Headers" \
-            --out "$RUNNER_TEMP/ps4-baseline190"
-          test "$(find "$RUNNER_TEMP/ps4-baseline190" -maxdepth 1 -name '*.o' -type f | wc -l)" -eq 15
-          # Includes 68 "new" engine units + 14 original baseline units +
-          # the five already embedded in the GPU bridge = all 87 originals,
-          # and the PUBLIC game.cpp entry (never private AOT binaries).
+          sdk="$PS4SDK"
+          # The previous step already linked 82 source objects + 5 native
+          # bridge source objects. DO NOT compile those 14 baseline files again.
+          clang++-18 --target=x86_64-pc-freebsd12-elf \
+            -std=c++20 -O0 -g0 -fPIC -ferror-limit=10 \
+            -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
+            -isysroot "$sdk" -isystem "$sdk/include" \
+            -isystem "$sdk/include/c++/v1" \
+            -I"$RUNNER_TEMP/nx-cpu-compat" \
+            -I"$root/upstream/runtime/include" \
+            -I"$root/upstream/runtime/src" \
+            -I"$root/upstream/games/castlevania" \
+            -I"$root/Vulkan-Headers/include" -include stdlib.h \
+            -c "$root/upstream/games/castlevania/game.cpp" \
+            -o "$RUNNER_TEMP/kazuma-public-game-entry.o"
           ld.lld-18 -m elf_x86_64 -r \
-            -o "$RUNNER_TEMP/full-runtime-gpu-all87.o" \
-            "$RUNNER_TEMP/ps4-runtime-full/"*.o \
-            "$RUNNER_TEMP/ps4-baseline190/"*.o \
-            "$RUNNER_TEMP/gpu-bridge/real-nx-vulkan-and-gpu.o"
-          readelf -h "$RUNNER_TEMP/full-runtime-gpu-all87.o" \
+            -o "$RUNNER_TEMP/full-runtime-gpu-with-game-entry.o" \
+            "$RUNNER_TEMP/ps4-runtime-full-plus-vulkan.o" \
+            "$RUNNER_TEMP/kazuma-public-game-entry.o"
+          readelf -h "$RUNNER_TEMP/full-runtime-gpu-with-game-entry.o" \
             | grep -E 'Class:|Machine:'
-          llvm-nm-18 -C --defined-only "$RUNNER_TEMP/full-runtime-gpu-all87.o" \
+          llvm-nm-18 -C --defined-only \
+            "$RUNNER_TEMP/full-runtime-gpu-with-game-entry.o" \
             > "$RUNNER_TEMP/full-runtime-defined.txt"
           grep -F -m 1 'nx::boot()' "$RUNNER_TEMP/full-runtime-defined.txt"
           grep -F -m 1 'nx::memory_init()' "$RUNNER_TEMP/full-runtime-defined.txt"
           grep -F -m 1 'vk_ps4_CreateSwapchainKHR' "$RUNNER_TEMP/full-runtime-defined.txt"
-          llvm-nm-18 -C --undefined-only "$RUNNER_TEMP/full-runtime-gpu-all87.o" \
-            > "$RUNNER_TEMP/full-runtime-undefined.txt"
-          printf 'KAZUMA190_FULL_RUNTIME_GPU_UNDEFINED_SYMBOLS=%s\n' \
-            "$(grep -c ' U ' "$RUNNER_TEMP/full-runtime-undefined.txt" || true)"
-          echo 'KAZUMA190_87_ORIGINAL_RUNTIME_PLUS_GAME_ENTRY_PLUS_GNM_VULKAN=RELOCATABLE_LINKED_NO_AOT_NO_HARDWARE'
+          echo 'KAZUMA190_ALL_87_RUNTIME_PLUS_GAME_ENTRY_PLUS_GNM_VULKAN=RELOCATABLE_LINKED_NO_AOT_NO_HARDWARE'
