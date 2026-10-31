@@ -5,12 +5,16 @@ on:
     paths:
       - 'tools/etapa167/**'
       - 'tools/etapa172/**'
+      - 'tools/etapa146/**'
+      - 'tools/etapa175/**'
       - '.github/workflows/kazuma-atomic16-openorbis.yml'
   push:
     branches: [main]
     paths:
       - 'tools/etapa167/**'
       - 'tools/etapa172/**'
+      - 'tools/etapa146/**'
+      - 'tools/etapa175/**'
       - '.github/workflows/kazuma-atomic16-openorbis.yml'
 permissions:
   contents: read
@@ -20,6 +24,11 @@ jobs:
     timeout-minutes: 22
     steps:
       - uses: actions/checkout@v4
+      - name: Testar o adaptador de memoria nativo com mmap e mprotect reais
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tools/etapa175/test_memory_host.sh
       - name: Instalar clang 18 e SDK OpenOrbis v0.5.4 (SHA fixado)
         shell: bash
         run: |
@@ -204,3 +213,33 @@ jobs:
           readelf -h "$RUNNER_TEMP/boot-preflight-probe-ps4.elf" \
             | grep -E 'Class:|Machine:|Type:'
           echo 'LINGSHU172_BOOT_PREFLIGHT_PS4_LINK=PASSED_NO_GAME_NO_HARDWARE_TEST'
+      - name: Vincular o adaptador de memoria para PS4 (OpenOrbis, sem jogo)
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$OO_PS4_TOOLCHAIN"
+          cat > "$RUNNER_TEMP/memory-probe.cpp" <<'CPP'
+          #include "platform.h"
+          int main() {
+            // Probe the real symbols, without reserving memory on hardware.
+            return (nx::plat::reserve(0,0) || nx::plat::commit(0,0)) ? 1 : 0;
+          }
+          CPP
+          clang++-18 --target=x86_64-pc-freebsd12-elf -std=c++20 -O0 -g0 -fPIC \
+            -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
+            -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
+            -I"$RUNNER_TEMP/upstream/runtime/src" \
+            -c tools/etapa146/platform_ps4_virtual_memory.cpp \
+            -o "$RUNNER_TEMP/ps4-virtual-memory.o"
+          clang++-18 --target=x86_64-pc-freebsd12-elf -std=c++20 -O0 -g0 -fPIC \
+            -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
+            -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
+            -I"$RUNNER_TEMP/upstream/runtime/src" \
+            -c "$RUNNER_TEMP/memory-probe.cpp" -o "$RUNNER_TEMP/memory-probe.o"
+          ld.lld-18 -m elf_x86_64 -pie --script "$sdk/link.x" --eh-frame-hdr \
+            "$RUNNER_TEMP/ps4-virtual-memory.o" "$RUNNER_TEMP/memory-probe.o" \
+            -L"$sdk/lib" -lc -lkernel -lc++ "$sdk/lib/crt1.o" \
+            -o "$RUNNER_TEMP/ps4-memory-link-probe.elf"
+          readelf -h "$RUNNER_TEMP/ps4-memory-link-probe.elf" \
+            | grep -E 'Class:|Machine:|Type:'
+          echo 'LINGSHU175_PS4_MEMORY_LINK=PASSED_NO_GAME_NO_HARDWARE_TEST'
