@@ -220,13 +220,7 @@ jobs:
             return modules;
           }
           }
-          namespace nx::plat {
-          std::string data_root(){return "/data/kazuma-lab";}
-          FILE* fopen_utf8(const std::string&,const char*){return nullptr;}
-          int fseek64(FILE* f,int64_t off,int whence){return std::fseek(f,off,whence);}
-          int64_t ftell64(FILE* f){return std::ftell(f);}
-          void log_line(const char* s){std::fprintf(stderr,"%s\n",s);}
-          }
+          // POSIX functions supplied by production tools/etapa144 object.
           extern "C" bool lingshu_ps4_boot_images_present();
           extern "C" bool lingshu_ps4_guest_layout_valid();
           int main(){return (lingshu_ps4_guest_layout_valid() && lingshu_ps4_boot_images_present()) ? 0 : 2;}
