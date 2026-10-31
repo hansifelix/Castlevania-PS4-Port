@@ -192,7 +192,39 @@ jobs:
           root="$RUNNER_TEMP/gpu"
           sdk="$PS4SDK"
           upstream="$root/upstream"
-          mkdir -p "$RUNNER_TEMP/gpu-bridge"
+          mkdir -p "$RUNNER_TEMP/gpu-bridge" "$RUNNER_TEMP/nx-cpu-compat/nx"
+          # The pinned upstream uses C++20 std::bit_cast, not provided by
+          # OpenOrbis libc++ v0.5.4. Reuse the same compat patch as private AOT.
+          cat > "$RUNNER_TEMP/nx-cpu-compat/nx/lingshu_cpu_compat.h" <<'CPP'
+          #pragma once
+          #include <cstdint>
+          #include <type_traits>
+          namespace lingshu_cpu_compat {
+          template <typename To,typename From>
+          constexpr To bit_cast(const From& from) noexcept {
+            static_assert(sizeof(To)==sizeof(From));
+            static_assert(std::is_trivially_copyable_v<To> && std::is_trivially_copyable_v<From>);
+            return __builtin_bit_cast(To,from);
+          }
+          template <typename T> constexpr T rotr(T v,int shift) noexcept {
+            static_assert(std::is_unsigned_v<T>);
+            constexpr int bits=int(sizeof(T)*8);
+            int n=((shift%bits)+bits)%bits;
+            return n ? T((v>>n)|(v<<(bits-n))) : v;
+          }
+          }
+          CPP
+          python3 - "$upstream/runtime/include/nx/cpu.h" \
+                 "$RUNNER_TEMP/nx-cpu-compat/nx/cpu.h" <<'PY_CPU'
+          from pathlib import Path
+          import sys
+          data=Path(sys.argv[1]).read_text(encoding="utf-8")
+          assert data.count("#include <bit>")==1 and data.count("std::bit_cast")>=5 and data.count("std::rotr(")==2
+          data=data.replace("#include <bit>",'#include "lingshu_cpu_compat.h"')
+          data=data.replace("std::bit_cast","lingshu_cpu_compat::bit_cast")
+          data=data.replace("std::rotr(","lingshu_cpu_compat::rotr(")
+          Path(sys.argv[2]).write_text(data,encoding="utf-8")
+          PY_CPU
           for name in vk_bridge vk_swapchain vk_present vk_gen; do
             echo "KAZUMA_REAL_NX_VULKAN_BRIDGE_COMPILING=$name"
             clang++-18 --target=x86_64-pc-freebsd12-elf \
@@ -200,6 +232,7 @@ jobs:
               -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
               -isysroot "$sdk" -isystem "$sdk/include" \
               -isystem "$sdk/include/c++/v1" \
+              -I"$RUNNER_TEMP/nx-cpu-compat" \
               -I"$upstream/runtime/include" -I"$upstream/runtime/src" \
               -I"$upstream/games/castlevania" \
               -I"$root/Vulkan-Headers/include" \
