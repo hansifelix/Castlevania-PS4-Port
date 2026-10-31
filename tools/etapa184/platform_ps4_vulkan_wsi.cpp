@@ -108,7 +108,7 @@ extern "C" VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL
 lingshu_ps4_vkGetInstanceProcAddr(VkInstance instance,const char* name) {
     if(!name)return nullptr;
     struct Hook {const char* name;PFN_vkVoidFunction fn;};
-    constexpr Hook hooks[]={
+    const Hook hooks[]={
         {"vkDestroySurfaceKHR",reinterpret_cast<PFN_vkVoidFunction>(&lingshu_vkDestroySurfaceKHR)},
         {"vkGetPhysicalDeviceSurfaceSupportKHR",reinterpret_cast<PFN_vkVoidFunction>(&lingshu_vkGetPhysicalDeviceSurfaceSupportKHR)},
         {"vkGetPhysicalDeviceSurfaceCapabilitiesKHR",reinterpret_cast<PFN_vkVoidFunction>(&lingshu_vkGetPhysicalDeviceSurfaceCapabilitiesKHR)},
