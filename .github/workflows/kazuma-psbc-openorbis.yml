@@ -1,0 +1,84 @@
+name: Kazuma - SPIR-V para GCN shader compiler real no PS4
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/kazuma-psbc-openorbis.yml'
+      - 'tools/etapa186/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kazuma-psbc-openorbis.yml'
+      - 'tools/etapa186/**'
+permissions:
+  contents: read
+jobs:
+  psbc-orbis-shaders:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Obter SDK oficial OpenOrbis e geradores Mesa
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang-18 llvm-18 lld-18 curl make python3-mako python3-ply
+          mkdir -p "$RUNNER_TEMP/sdk" "$RUNNER_TEMP/dl"
+          curl -fLsS --retry 3 --retry-delay 3 \
+            https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz \
+            -o "$RUNNER_TEMP/dl/sdk.tar.gz"
+          echo '3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526  '"$RUNNER_TEMP/dl/sdk.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/dl/sdk.tar.gz" -C "$RUNNER_TEMP/sdk"
+          sdk="$(find "$RUNNER_TEMP/sdk" -name link.x -type f -print -quit)"
+          test -n "$sdk"
+          echo "PS4SDK=$(dirname "$sdk")" >> "$GITHUB_ENV"
+      - name: Fontes abertas e revisoes imutaveis
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/shaders"
+          cd "$RUNNER_TEMP/shaders"
+          git clone -q --filter=blob:none https://github.com/PS4-OpenGNM/opengnm-psbc.git
+          git -C opengnm-psbc checkout --detach 28697f007862427ebec54388ec972ce6e3545912
+          git clone -q --filter=blob:none https://github.com/PS4-OpenGNM/opengnm.git
+          git -C opengnm checkout --detach 4b295ca54c82c83acf308d1c646a2dfa9ae57350
+          git clone -q --filter=blob:none https://github.com/KhronosGroup/Vulkan-Headers.git
+          git -C Vulkan-Headers checkout --detach 9fbc2a782ee3f8a4db64e7d991e23da75e893f44
+          git clone -q --filter=blob:none https://github.com/KhronosGroup/SPIRV-Headers.git
+          git -C SPIRV-Headers checkout --detach fef168c54ed2e37c314eb251806aaf9877f38465
+          test "$(git -C opengnm-psbc rev-parse HEAD)" = 28697f007862427ebec54388ec972ce6e3545912
+          test "$(git -C opengnm rev-parse HEAD)" = 4b295ca54c82c83acf308d1c646a2dfa9ae57350
+          echo 'KAZUMA186_PSBC_SOURCE=PINNED_4_PUBLIC_UPSTREAMS_NO_GAME'
+      - name: Gerar codigo Mesa/NIR/ACO e compilar PSBC real para Orbis
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/shaders/opengnm-psbc"
+          export OO_PS4_TOOLCHAIN="$PS4SDK"
+          # Dependencies include generated tables; all codegen runs on the host.
+          timeout 300s make -j2 -f Makefile.orbis generated
+          test -s src/compiler/nir/nir_opcodes.h
+          test -s src/amd/compiler/aco_opcodes.h
+          # Compile the actual shader frontend before the full Mesa library.
+          timeout 180s make -j2 -f Makefile.orbis \
+            CC=clang-18 CXX=clang++-18 AR=llvm-ar-18 \
+            libpsbc/psbc_compile.orbis.o
+          echo 'KAZUMA186_REAL_SPIRV_TO_GCN_FRONTEND=COMPILED_PS4_NOT_EXECUTED'
+          # Strict ceiling keeps runners from looping on missing dependencies.
+          timeout --signal=TERM --kill-after=20s 1400s \
+            make -j2 -f Makefile.orbis \
+            CC=clang-18 CXX=clang++-18 AR=llvm-ar-18
+          test -s libpsbc.orbis.a
+          count="$(llvm-ar-18 t libpsbc.orbis.a | wc -l)"
+          test "$count" -ge 300
+          printf 'KAZUMA186_REAL_PSBC_ORBIS_ARCHIVE_OBJECTS=%s\n' "$count"
+          # Link relocatably to ensure all compiler objects use PS4 architecture.
+          ld.lld-18 -m elf_x86_64 -r -o "$RUNNER_TEMP/psbc-compiler-real.o" \
+            --whole-archive libpsbc.orbis.a --no-whole-archive
+          readelf -h "$RUNNER_TEMP/psbc-compiler-real.o" | grep -E 'Class:|Machine:'
+          llvm-nm-18 --defined-only "$RUNNER_TEMP/psbc-compiler-real.o" \
+            > "$RUNNER_TEMP/psbc-compiler-symbols.txt"
+          grep -E -m 3 ' [Tt] psbc_(init|compile_shader|shutdown)' \
+            "$RUNNER_TEMP/psbc-compiler-symbols.txt"
+          echo 'KAZUMA186_REAL_PSBC_ORBIS_LINK=PASSED_NO_GPU_EXECUTION_NO_GAME'
