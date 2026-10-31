@@ -105,7 +105,8 @@ jobs:
           readelf -h "$RUNNER_TEMP/gpu-objects/opengnm-all-ps4.o" \
             | grep -E 'Class:|Machine:'
           llvm-nm-18 --defined-only "$RUNNER_TEMP/gpu-objects/opengnm-all-ps4.o" \
-            | grep -E ' [Tt] sceGnm' | head -n 7
+            > "$RUNNER_TEMP/gpu-objects/opengnm-exported-symbols.txt"
+          grep -E -m 7 ' [Tt] sceGnm' "$RUNNER_TEMP/gpu-objects/opengnm-exported-symbols.txt"
           echo 'KAZUMA_OPENGNM_ALL_SOURCES_CROSS_COMPILED=PASSED_PS4_OBJECT_NOT_EXECUTED'
       - name: Exercitar ponte Vulkan WSI REAL e compilar para PS4
         shell: bash
