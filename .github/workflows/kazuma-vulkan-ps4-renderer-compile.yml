@@ -356,3 +356,40 @@ jobs:
           grep -F -m 1 'nx::memory_init()' "$RUNNER_TEMP/full-runtime-defined.txt"
           grep -F -m 1 'vk_ps4_CreateSwapchainKHR' "$RUNNER_TEMP/full-runtime-defined.txt"
           echo 'KAZUMA190_ALL_87_RUNTIME_PLUS_GAME_ENTRY_PLUS_GNM_VULKAN=RELOCATABLE_LINKED_NO_AOT_NO_HARDWARE'
+
+      - name: Cruzar engine COMPLETA com adaptadores PS4 de producao e auditar ABI
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/gpu"
+          sdk="$PS4SDK"
+          mkdir -p "$RUNNER_TEMP/adapter-audit192"
+          for src in \
+            tools/etapa144/platform_ps4_posix_core.cpp \
+            tools/etapa146/platform_ps4_virtual_memory.cpp \
+            tools/etapa191/platform_ps4_system_contract.cpp; do
+            base="$(basename "$src" .cpp)"
+            clang++-18 --target=x86_64-pc-freebsd12-elf \
+              -std=c++20 -O0 -g0 -fPIC -ferror-limit=10 \
+              -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
+              -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
+              -I"$root/upstream/runtime/src" \
+              -c "$src" -o "$RUNNER_TEMP/adapter-audit192/$base.o"
+          done
+          # Real engine/runtime already contains all 87 original sources +
+          # game.cpp, OpenGNM, ICD, and WSI. These are production adapters.
+          ld.lld-18 -m elf_x86_64 -r \
+            -o "$RUNNER_TEMP/adapter-audit192/engine-plus-real-platform.o" \
+            "$RUNNER_TEMP/full-runtime-gpu-with-game-entry.o" \
+            "$RUNNER_TEMP/adapter-audit192/"*.o
+          llvm-nm-18 -C --defined-only \
+            "$RUNNER_TEMP/adapter-audit192/engine-plus-real-platform.o" \
+            > "$RUNNER_TEMP/adapter-audit192/defined.txt"
+          llvm-nm-18 -C --undefined-only \
+            "$RUNNER_TEMP/adapter-audit192/engine-plus-real-platform.o" \
+            > "$RUNNER_TEMP/adapter-audit192/unresolved.txt"
+          python3 tools/etapa192/audit_real_platform_symbols.py \
+            "$RUNNER_TEMP/adapter-audit192/defined.txt" \
+            "$RUNNER_TEMP/adapter-audit192/unresolved.txt"
+          echo 'KAZUMA192_REAL_87_RUNTIME_PLUS_3_PS4_ADAPTERS=LINKED_WITH_DIAGNOSTICS_NO_AOT_NO_HARDWARE'
+
