@@ -11,6 +11,8 @@ on:
       - 'tools/etapa177/**'
       - 'tools/etapa178/**'
       - 'tools/etapa180/**'
+      - 'tools/etapa181/**'
+      - 'tools/etapa162/**'
       - 'tools/etapa144/**'
       - 'tools/etapa179/**'
       - '.github/workflows/kazuma-atomic16-openorbis.yml'
@@ -25,6 +27,8 @@ on:
       - 'tools/etapa177/**'
       - 'tools/etapa178/**'
       - 'tools/etapa180/**'
+      - 'tools/etapa181/**'
+      - 'tools/etapa162/**'
       - 'tools/etapa144/**'
       - 'tools/etapa179/**'
       - '.github/workflows/kazuma-atomic16-openorbis.yml'
@@ -206,6 +210,7 @@ jobs:
             -o "$RUNNER_TEMP/guest-layout-host"
           "$RUNNER_TEMP/guest-layout-host"
           bash tools/etapa180/test_boot_log_host.sh "$RUNNER_TEMP/upstream/runtime/src"
+          bash tools/etapa181/test_boot_stage.sh "$RUNNER_TEMP/upstream/runtime/src"
           cat > "$RUNNER_TEMP/boot-probe.cpp" <<'CPP'
           #include <nx/module.h>
           #include <string>
@@ -259,6 +264,29 @@ jobs:
           echo 'LINGSHU172_BOOT_PREFLIGHT_PS4_LINK=PASSED_NO_GAME_NO_HARDWARE_TEST'
           echo 'LINGSHU178_GUEST_LAYOUT_PS4_LINK=PASSED_NO_GAME_NO_HARDWARE_TEST'
           echo 'LINGSHU180_REAL_PS4_BOOT_LOGGER_LINK=PASSED_NO_GAME_NO_HARDWARE_TEST'
+          # The actual production main calls nx::boot(), which is intentionally
+          # unresolved until the private AOT runtime is linked.
+          clang++-18 --target=x86_64-pc-freebsd12-elf -std=c++20 -O2 -g0 -fPIC \
+            -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
+            -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
+            -I"$RUNNER_TEMP/upstream/runtime/src" \
+            -c tools/etapa162/ps4_boot_link_entry.cpp \
+            -o "$RUNNER_TEMP/ps4-real-boot-entry-181.o"
+          ld.lld-18 -r -o "$RUNNER_TEMP/ps4-real-boot-path-181.o" \
+            "$RUNNER_TEMP/ps4-real-boot-entry-181.o" \
+            "$RUNNER_TEMP/boot-preflight-ps4.o" \
+            "$RUNNER_TEMP/guest-layout-ps4.o" \
+            "$RUNNER_TEMP/ps4-real-posix-core-180.o"
+          llvm-nm-18 -C --undefined-only "$RUNNER_TEMP/ps4-real-boot-path-181.o" \
+            > "$RUNNER_TEMP/boot-181-undefined.txt"
+          if grep -E 'nx::plat::|lingshu_ps4_guest_layout_valid|lingshu_ps4_boot_images_present' \
+               "$RUNNER_TEMP/boot-181-undefined.txt"; then
+            echo 'LINGSHU181_ERROR=PRODUCTION_BOOT_GATES_NOT_RESOLVED'
+            exit 1
+          fi
+          grep -F 'nx::boot()' "$RUNNER_TEMP/boot-181-undefined.txt"
+          echo 'LINGSHU181_REAL_PS4_BOOT_PATH_LINK=PASSED_NX_BOOT_REQUIRES_REAL_ENGINE'
+
       - name: Vincular o adaptador de memoria para PS4 (OpenOrbis, sem jogo)
         shell: bash
         run: |
