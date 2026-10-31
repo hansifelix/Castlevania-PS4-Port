@@ -10,8 +10,15 @@ cat > "$tmp/nx/module.h" <<'HEADER'
 #pragma once
 #include <span>
 #include <cstdint>
+#include <cstddef>
 namespace nx {
-struct ModuleInfo {const char* name; uint64_t base; uint64_t text, text_size, ro, ro_size, data, data_size, bss, bss_size;};
+struct InstructionPatch {uint64_t offset; uint32_t expected, replacement;};
+struct ModuleInfo {
+    const char* name; uint64_t base;
+    uint64_t text, text_size, ro, ro_size, data, data_size, bss, bss_size;
+    const InstructionPatch* instruction_patches=nullptr;
+    size_t instruction_patch_count=0;
+};
 std::span<const ModuleInfo* const> linked_modules();
 }
 HEADER
@@ -54,23 +61,44 @@ extern "C" bool lingshu_ps4_boot_images_present();
 int main(){
  root=std::getenv("LINGSHU172_TEST_ROOT");
  assert(!root.empty());
- assert(!lingshu_ps4_boot_images_present() && message.find("missing")!=std::string::npos);
+ int cases=0;
+ auto check=[&](bool result){assert(result); ++cases;};
+ check(!lingshu_ps4_boot_images_present() && message.find("missing")!=std::string::npos);
  for(auto [name,n]:std::vector<std::pair<std::string,int>>{{"main",5},{"sdk",8},{"subsdk0",3}}){
    FILE* f=fopen((root+"/analysis/"+name+".bin").c_str(),"wb");
    assert(f);for(int i=0;i<n;i++) fputc(0,f);fclose(f);
  }
- assert(lingshu_ps4_boot_images_present());
+ check(lingshu_ps4_boot_images_present());
+ // Check the actual AOT instruction-patch metadata contract using fake ARM64 bytes.
+ nx::InstructionPatch good{0,0,0}, mismatch{0,0x12345678,0}, outside{4,0,0};
+ a.text=0; a.text_size=4; a.instruction_patches=&good; a.instruction_patch_count=1;
+ check(lingshu_ps4_boot_images_present()); // correct opcode matches the 4 zero bytes in fake flat image
+ a.instruction_patches=&mismatch;
+ check(!lingshu_ps4_boot_images_present() && message.find("opcode mismatch")!=std::string::npos);
+ a.instruction_patches=&outside;
+ check(!lingshu_ps4_boot_images_present() && message.find("patch bounds")!=std::string::npos);
+ a.instruction_patches=nullptr;
+ check(!lingshu_ps4_boot_images_present() && message.find("metadata missing")!=std::string::npos);
+ a.instruction_patches=&good;
+ a.text_size=2;
+ check(!lingshu_ps4_boot_images_present() && message.find("patch bounds")!=std::string::npos);
+ a.text_size=4;
+ a.instruction_patches=nullptr; a.instruction_patch_count=0;
  b.data_size=100;
- assert(!lingshu_ps4_boot_images_present() && message.find("wrong flat image length")!=std::string::npos);
+ check(!lingshu_ps4_boot_images_present() && message.find("wrong flat image length")!=std::string::npos);
  b.data_size=8;
  a.data=UINT64_MAX;
- assert(!lingshu_ps4_boot_images_present() && message.find("overflow")!=std::string::npos);
+ check(!lingshu_ps4_boot_images_present() && message.find("overflow")!=std::string::npos);
  a.data=0;
  a.name="unknown";
- assert(!lingshu_ps4_boot_images_present() && message.find("invalid AOT module table")!=std::string::npos);
+ check(!lingshu_ps4_boot_images_present() && message.find("invalid AOT module table")!=std::string::npos);
  a.name="main";
- assert(lingshu_ps4_boot_images_present());
- puts("LINGSHU172_BOOT_PREFLIGHT_SYNTHETIC=PASSED_6_CASES_HOST_ONLY");
+ b.name="subsdk0";
+ check(!lingshu_ps4_boot_images_present() && message.find("module order/name mismatch")!=std::string::npos);
+ b.name="sdk";
+ check(lingshu_ps4_boot_images_present());
+ std::printf("LINGSHU174_BOOT_AOT_OPCODE_PREFLIGHT=PASSED_%d_CASES_HOST_ONLY\n", cases);
+
 }
 TEST
 g++ -std=c++20 -O2 -Wall -Wextra -Werror \
