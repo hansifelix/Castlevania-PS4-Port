@@ -225,7 +225,7 @@ jobs:
           data=data.replace("std::rotr(","lingshu_cpu_compat::rotr(")
           Path(sys.argv[2]).write_text(data,encoding="utf-8")
           PY_CPU
-          for name in vk_bridge vk_swapchain vk_present vk_gen; do
+          for name in vk_bridge vk_swapchain vk_present vk_gen hle_vi; do
             echo "KAZUMA_REAL_NX_VULKAN_BRIDGE_COMPILING=$name"
             clang++-18 --target=x86_64-pc-freebsd12-elf \
               -std=c++20 -O0 -g0 -fPIC -ferror-limit=8 \
@@ -248,4 +248,4 @@ jobs:
             > "$RUNNER_TEMP/gpu-bridge/bridge-defined.txt"
           grep -F -m 1 'nx::vk::' "$RUNNER_TEMP/gpu-bridge/bridge-defined.txt"
           grep -F 'vk_ps4_CreateSwapchainKHR' "$RUNNER_TEMP/gpu-bridge/bridge-defined.txt"
-          echo 'KAZUMA_NX_ORIGINAL_VULKAN_BRIDGE_PLUS_ICD=RELOCATABLE_OK_NO_GAME_NO_PS4_EXECUTION'
+          echo 'KAZUMA_NX_ORIGINAL_VULKAN_BRIDGE_PLUS_VI_HLE_PLUS_ICD=RELOCATABLE_OK_NO_GAME_NO_PS4_EXECUTION'
