@@ -36,7 +36,8 @@ bool make_dirs(const std::string& path) {
 void window_size(uint32_t& w,uint32_t& h){desktop_size(w,h);}
 void screen_size(uint32_t& w,uint32_t& h){desktop_size(w,h);}
 float default_render_scale(){return 1.0f;} // Full resolution, not a GPU performance promise.
-size_t touch_overlay(OverlayShape*,size_t){return 0;} // Standard PS4 has no touch display.
+// touch_overlay is implemented by original runtime/src/touch_layout.cpp.
+// Do not redefine it here: it causes a duplicate ELF symbol at full-engine link.
 bool headless(){return false;} // PS4 homebrew console UI is always foreground.
 void start_memory_guard() {
     // A resource limit has NOT been installed; don't claim it exists.
