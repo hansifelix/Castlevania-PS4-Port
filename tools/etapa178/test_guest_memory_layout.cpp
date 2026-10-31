@@ -10,12 +10,14 @@
 #include "platform.h"
 
 namespace {
-nx::ModuleInfo a{.name="main", .base=nx::kModuleBase,
-                 .bss=0x10000, .bss_size=0x4000};
-nx::ModuleInfo b{.name="sdk", .base=nx::kModuleBase + 0x10000000,
-                 .bss=0x20000, .bss_size=0x4000};
-nx::ModuleInfo c{.name="subsdk0", .base=nx::kModuleBase + 0x20000000,
-                 .bss=0x30000, .bss_size=0x4000};
+nx::ModuleInfo a{}, b{}, c{}; // Explicit zero initialization: keep all upstream fields valid.
+struct SyntheticModules {
+    SyntheticModules() {
+        a.name="main"; a.base=nx::kModuleBase; a.bss=0x10000; a.bss_size=0x4000;
+        b.name="sdk"; b.base=nx::kModuleBase+0x10000000; b.bss=0x20000; b.bss_size=0x4000;
+        c.name="subsdk0"; c.base=nx::kModuleBase+0x20000000; c.bss=0x30000; c.bss_size=0x4000;
+    }
+} synthetic_modules;
 size_t count=3;
 std::string diagnostic;
 } // namespace
@@ -53,7 +55,7 @@ int main() {
     CHECK(reject("unexpected AOT")==0);
     b.name=orig_name;
 
-    const uint64_t orig_base=b.base, orig_bss=b.bss, orig_bss_size=b.bss_size;
+    const uint64_t orig_base=b.base, orig_bss=b.bss;
     b.base=0;
     CHECK(reject("overflow / outside")==0);
     b.base=orig_base;
