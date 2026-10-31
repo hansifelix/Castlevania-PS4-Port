@@ -205,6 +205,7 @@ jobs:
             tools/etapa178/test_guest_memory_layout.cpp \
             -o "$RUNNER_TEMP/guest-layout-host"
           "$RUNNER_TEMP/guest-layout-host"
+          bash tools/etapa180/test_boot_log_host.sh "$RUNNER_TEMP/upstream/runtime/src"
           cat > "$RUNNER_TEMP/boot-probe.cpp" <<'CPP'
           #include <nx/module.h>
           #include <string>
