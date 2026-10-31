@@ -246,6 +246,6 @@ jobs:
             | grep -E 'Class:|Machine:'
           llvm-nm-18 -C --defined-only "$RUNNER_TEMP/gpu-bridge/real-nx-vulkan-and-gpu.o" \
             > "$RUNNER_TEMP/gpu-bridge/bridge-defined.txt"
-          grep -F 'nx::vk::' "$RUNNER_TEMP/gpu-bridge/bridge-defined.txt" | grep -m 1 'vk'
+          grep -F -m 1 'nx::vk::' "$RUNNER_TEMP/gpu-bridge/bridge-defined.txt"
           grep -F 'vk_ps4_CreateSwapchainKHR' "$RUNNER_TEMP/gpu-bridge/bridge-defined.txt"
           echo 'KAZUMA_NX_ORIGINAL_VULKAN_BRIDGE_PLUS_ICD=RELOCATABLE_OK_NO_GAME_NO_PS4_EXECUTION'
