@@ -77,6 +77,11 @@ jobs:
             > src/util/shader_stats.h
           test -s src/util/shader_stats.h
           echo 'KAZUMA186_MESA_SHADER_STATS_HEADER=GENERATED_FROM_UPSTREAM_XML'
+          python3 src/compiler/builtin_types_h.py src/compiler/builtin_types.h
+          python3 src/compiler/builtin_types_c.py src/compiler/builtin_types.c
+          test -s src/compiler/builtin_types.h
+          test -s src/compiler/builtin_types.c
+          echo 'KAZUMA186_MESA_BUILTIN_TYPES=GENERATED_AND_READY_FOR_COMPILATION'
           # Compile the actual shader frontend before the full Mesa library.
           timeout 180s make -j2 -f Makefile.orbis \
             CC=clang-18 CXX=clang++-18 AR=llvm-ar-18 \
