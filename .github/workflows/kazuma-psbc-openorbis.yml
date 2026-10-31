@@ -72,6 +72,11 @@ jobs:
           test -s src/util/format/u_format_pack.h
           test -s src/util/format/u_format_table.c
           echo 'KAZUMA186_MESA_FORMAT_GENERATORS=THREE_REQUIRED_OUTPUTS_CREATED'
+          python3 src/util/process_shader_stats.py \
+            src/util/shader_stats.rnc src/util/shader_stats.xml \
+            > src/util/shader_stats.h
+          test -s src/util/shader_stats.h
+          echo 'KAZUMA186_MESA_SHADER_STATS_HEADER=GENERATED_FROM_UPSTREAM_XML'
           # Compile the actual shader frontend before the full Mesa library.
           timeout 180s make -j2 -f Makefile.orbis \
             CC=clang-18 CXX=clang++-18 AR=llvm-ar-18 \
