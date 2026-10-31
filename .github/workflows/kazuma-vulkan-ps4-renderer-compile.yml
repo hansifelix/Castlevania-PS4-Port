@@ -115,6 +115,6 @@ jobs:
             "$RUNNER_TEMP/gpu-objects/vk_ps4_entry.c.o" \
             "$RUNNER_TEMP/gpu-objects/vk_ps4_swapchain.c.o"
           llvm-nm-18 --defined-only "$RUNNER_TEMP/gpu-objects/kazuma-gpu-wsi-bundle.o" \
-            | grep ' lingshu_ps4_vkGetInstanceProcAddr
+            | grep -F 'lingshu_ps4_vkGetInstanceProcAddr'
 
           echo 'KAZUMA_REAL_VULKAN_WSI_PS4_RELOCATABLE=LINKED_NO_GAME_NO_HARDWARE_TEST'
