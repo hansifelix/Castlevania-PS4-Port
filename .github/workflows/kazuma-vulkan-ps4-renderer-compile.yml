@@ -272,3 +272,37 @@ jobs:
           readelf -h "$RUNNER_TEMP/ps4-runtime-full-plus-vulkan.o" \
             | grep -E 'Class:|Machine:'
           echo 'KAZUMA189_68_ORIGINAL_RUNTIME_PS4_OBJECTS_PLUS_GPU=RELOCATABLE_OK_NO_GAME'
+
+      - name: Vincular todas as 87 fontes reais da engine com VideoOut e driver grafico
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/gpu"
+          mkdir -p "$RUNNER_TEMP/ps4-baseline190"
+          python3 tools/etapa190/compile_original_baseline.py \
+            --upstream "$root/upstream" \
+            --sdk "$PS4SDK" \
+            --compat "$RUNNER_TEMP/nx-cpu-compat" \
+            --vulkan "$root/Vulkan-Headers" \
+            --out "$RUNNER_TEMP/ps4-baseline190"
+          test "$(find "$RUNNER_TEMP/ps4-baseline190" -maxdepth 1 -name '*.o' -type f | wc -l)" -eq 15
+          # Includes 68 "new" engine units + 14 original baseline units +
+          # the five already embedded in the GPU bridge = all 87 originals,
+          # and the PUBLIC game.cpp entry (never private AOT binaries).
+          ld.lld-18 -m elf_x86_64 -r \
+            -o "$RUNNER_TEMP/full-runtime-gpu-all87.o" \
+            "$RUNNER_TEMP/ps4-runtime-full/"*.o \
+            "$RUNNER_TEMP/ps4-baseline190/"*.o \
+            "$RUNNER_TEMP/gpu-bridge/real-nx-vulkan-and-gpu.o"
+          readelf -h "$RUNNER_TEMP/full-runtime-gpu-all87.o" \
+            | grep -E 'Class:|Machine:'
+          llvm-nm-18 -C --defined-only "$RUNNER_TEMP/full-runtime-gpu-all87.o" \
+            > "$RUNNER_TEMP/full-runtime-defined.txt"
+          grep -F -m 1 'nx::boot()' "$RUNNER_TEMP/full-runtime-defined.txt"
+          grep -F -m 1 'nx::memory_init()' "$RUNNER_TEMP/full-runtime-defined.txt"
+          grep -F -m 1 'vk_ps4_CreateSwapchainKHR' "$RUNNER_TEMP/full-runtime-defined.txt"
+          llvm-nm-18 -C --undefined-only "$RUNNER_TEMP/full-runtime-gpu-all87.o" \
+            > "$RUNNER_TEMP/full-runtime-undefined.txt"
+          printf 'KAZUMA190_FULL_RUNTIME_GPU_UNDEFINED_SYMBOLS=%s\n' \
+            "$(grep -c ' U ' "$RUNNER_TEMP/full-runtime-undefined.txt" || true)"
+          echo 'KAZUMA190_87_ORIGINAL_RUNTIME_PLUS_GAME_ENTRY_PLUS_GNM_VULKAN=RELOCATABLE_LINKED_NO_AOT_NO_HARDWARE'
