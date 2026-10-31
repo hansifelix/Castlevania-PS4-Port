@@ -8,6 +8,7 @@ on:
       - 'tools/etapa146/**'
       - 'tools/etapa175/**'
       - 'tools/etapa176/**'
+      - 'tools/etapa177/**'
       - '.github/workflows/kazuma-atomic16-openorbis.yml'
   push:
     branches: [main]
@@ -17,6 +18,7 @@ on:
       - 'tools/etapa146/**'
       - 'tools/etapa175/**'
       - 'tools/etapa176/**'
+      - 'tools/etapa177/**'
       - '.github/workflows/kazuma-atomic16-openorbis.yml'
 permissions:
   contents: read
@@ -31,6 +33,11 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m unittest discover -s tools/etapa176 -p 'test_check_shards.py' -v
+      - name: Validar proveniencia de runs AOT com metadados sinteticos
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/etapa177 -p 'test_validate_source_runs.py' -v
       - name: Testar o adaptador de memoria nativo com mmap e mprotect reais
         shell: bash
         run: |
