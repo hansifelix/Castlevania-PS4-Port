@@ -61,6 +61,19 @@ def run() -> None:
             raise FileNotFoundError(filename)
         objname = src.replace("/", "_").removesuffix(".cpp") + ".o"
         output = args.out / ("RT-" + objname)
+        # Pinned upstream nvn_debug.cpp has std::max(float, double),
+        # which strict OpenOrbis libc++ rejects. Patch ONLY a temporary
+        # copy, with a single exact-match assertion; never change upstream.
+        build_input = filename
+        if src == "runtime/src/nvn/nvn_debug.cpp":
+            original_text = filename.read_text(encoding="utf-8")
+            before = "std::max(big, std::ldexp(float(1024 + m), int(e) - 25) * (e ? 1.0f : 0.0f))"
+            after = "std::max<float>(big, std::ldexp(float(1024 + m), int(e) - 25) * (e ? 1.0f : 0.0f))"
+            if original_text.count(before) != 1:
+                raise RuntimeError("Pinned nvn_debug.cpp changed; aborting PS4 compat patch")
+            build_input = filename.with_name("nvn_debug_ps4_189.cpp")
+            build_input.write_text(original_text.replace(before, after), encoding="utf-8")
+            print("LINGSHU189_NVN_DEBUG_FLOAT_TYPE=PATCHED_EXACTLY_ONCE", flush=True)
         cmd = [
             "clang++-18", "--target=x86_64-pc-freebsd12-elf",
             "-std=c++20", "-O0", "-g0", "-fPIC", "-ferror-limit=10",
@@ -74,7 +87,7 @@ def run() -> None:
             "-I" + str(args.upstream / "games/castlevania"),
             "-I" + str(args.vulkan / "include"),
             "-include", "stdlib.h",
-            "-c", str(filename), "-o", str(output),
+            "-c", str(build_input), "-o", str(output),
         ]
         print(f"LINGSHU189_COMPILE={n}/{len(missing)}:{src}", flush=True)
         subprocess.run(cmd, check=True, timeout=100)
