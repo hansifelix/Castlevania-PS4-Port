@@ -7,6 +7,7 @@ on:
       - 'tools/etapa172/**'
       - 'tools/etapa146/**'
       - 'tools/etapa175/**'
+      - 'tools/etapa176/**'
       - '.github/workflows/kazuma-atomic16-openorbis.yml'
   push:
     branches: [main]
@@ -15,6 +16,7 @@ on:
       - 'tools/etapa172/**'
       - 'tools/etapa146/**'
       - 'tools/etapa175/**'
+      - 'tools/etapa176/**'
       - '.github/workflows/kazuma-atomic16-openorbis.yml'
 permissions:
   contents: read
@@ -24,6 +26,11 @@ jobs:
     timeout-minutes: 22
     steps:
       - uses: actions/checkout@v4
+      - name: Testar contrato exato dos sete AOT (somente arquivos sinteticos)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tools/etapa176 -p 'test_check_shards.py' -v
       - name: Testar o adaptador de memoria nativo com mmap e mprotect reais
         shell: bash
         run: |
