@@ -260,9 +260,10 @@ jobs:
             --sdk "$PS4SDK" \
             --compat "$RUNNER_TEMP/nx-cpu-compat" \
             --vulkan "$root/Vulkan-Headers" \
-            --out "$RUNNER_TEMP/ps4-runtime-full"
+            --out "$RUNNER_TEMP/ps4-runtime-full" \
+            --include-baseline
           count="$(find "$RUNNER_TEMP/ps4-runtime-full" -maxdepth 1 -name 'RT-*.o' -type f | wc -l)"
-          test "$count" -eq 68
+          test "$count" -eq 82
           # All original services/NVN modules must coexist with the genuine
           # upstream bridge, GNM driver and VideoOut surface adapter.
           ld.lld-18 -m elf_x86_64 -r \
@@ -271,7 +272,31 @@ jobs:
             "$RUNNER_TEMP/gpu-bridge/real-nx-vulkan-and-gpu.o"
           readelf -h "$RUNNER_TEMP/ps4-runtime-full-plus-vulkan.o" \
             | grep -E 'Class:|Machine:'
-          echo 'KAZUMA189_68_ORIGINAL_RUNTIME_PS4_OBJECTS_PLUS_GPU=RELOCATABLE_OK_NO_GAME'
+          echo 'KAZUMA190_87_ORIGINAL_RUNTIME_PS4_OBJECTS_PLUS_GPU=RELOCATABLE_OK_NO_GAME'
+          # The 82 compiled units plus 5 existing engine bridge files = 87.
+          # Requiring all their symbols to coexist catches duplicate exports.
+          # ld.lld -r is NOT the final link and unresolveds are still possible.
+          llvm-nm-18 -C --undefined-only \
+            "$RUNNER_TEMP/ps4-runtime-full-plus-vulkan.o" \
+            > "$RUNNER_TEMP/ps4-runtime-undefined-all.txt"
+          grep -E ' [Uu] ' "$RUNNER_TEMP/ps4-runtime-undefined-all.txt" \
+            | sed -E 's/^.* [Uu] //' | sort -u \
+            > "$RUNNER_TEMP/ps4-runtime-undefined-unique.txt" || true
+          python3 - "$RUNNER_TEMP/ps4-runtime-undefined-unique.txt" <<'PY_AUDIT'
+          import sys
+          from pathlib import Path
+          syms=Path(sys.argv[1]).read_text().splitlines()
+          categories={
+              "NX_RUNTIME":sum(x.startswith("nx::") and not x.startswith("nx::plat::") for x in syms),
+              "NX_PLATFORM":sum(x.startswith("nx::plat::") for x in syms),
+              "SCE_NATIVE":sum(x.startswith("sce") for x in syms),
+              "GUEST_AOT":sum(x.startswith(("main_", "sdk_", "subsdk0_")) for x in syms),
+              "VK_LOADER":sum("vkGetInstanceProcAddr" in x for x in syms),
+              "TOTAL":len(syms),
+          }
+          for k,v in categories.items():print(f"KAZUMA190_UNRESOLVED_{k}={v}")
+          print("KAZUMA190_87_UPSTREAM_RUNTIME_LINK_AUDITED=RELOCATABLE_ONLY_NO_EBOOT")
+          PY_AUDIT
 
       - name: Vincular todas as 87 fontes reais da engine com VideoOut e driver grafico
         shell: bash
