@@ -1,0 +1,120 @@
+name: Kazuma - compilacao do driver Vulkan real PS4 (sem jogo)
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/kazuma-vulkan-ps4-renderer-compile.yml'
+      - 'tools/etapa183/**'
+      - 'tools/etapa184/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/kazuma-vulkan-ps4-renderer-compile.yml'
+      - 'tools/etapa183/**'
+      - 'tools/etapa184/**'
+permissions:
+  contents: read
+jobs:
+  vulkan-ps4-openorbis:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar compilador e SDK OpenOrbis fixado
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang-18 llvm-18 lld-18 curl
+          mkdir -p "$RUNNER_TEMP/sdk" "$RUNNER_TEMP/dl"
+          curl -fLsS --retry 3 --retry-delay 3 \
+            https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz \
+            -o "$RUNNER_TEMP/dl/sdk.tar.gz"
+          echo '3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526  '"$RUNNER_TEMP/dl/sdk.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/dl/sdk.tar.gz" -C "$RUNNER_TEMP/sdk"
+          sdk="$(find "$RUNNER_TEMP/sdk" -name link.x -type f -print -quit)"
+          test -n "$sdk"
+          echo "PS4SDK=$(dirname "$sdk")" >> "$GITHUB_ENV"
+      - name: Obter fontES publicas do driver Vulkan e GNM em revisoes fixadas
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/gpu"
+          git clone -q --filter=blob:none https://github.com/PS4-OpenGNM/vulkan-ps4.git "$RUNNER_TEMP/gpu/vulkan-ps4"
+          git -C "$RUNNER_TEMP/gpu/vulkan-ps4" checkout --detach f4d940b723771b3fe637e8ac0704bb5d6ab19622
+          git clone -q --filter=blob:none https://github.com/PS4-OpenGNM/opengnm.git "$RUNNER_TEMP/gpu/opengnm"
+          git -C "$RUNNER_TEMP/gpu/opengnm" checkout --detach 4b295ca54c82c83acf308d1c646a2dfa9ae57350
+          git clone -q --filter=blob:none https://github.com/KhronosGroup/Vulkan-Headers.git "$RUNNER_TEMP/gpu/Vulkan-Headers"
+          git -C "$RUNNER_TEMP/gpu/Vulkan-Headers" checkout --detach 9fbc2a782ee3f8a4db64e7d991e23da75e893f44
+          test "$(git -C "$RUNNER_TEMP/gpu/vulkan-ps4" rev-parse HEAD)" = f4d940b723771b3fe637e8ac0704bb5d6ab19622
+          test "$(git -C "$RUNNER_TEMP/gpu/opengnm" rev-parse HEAD)" = 4b295ca54c82c83acf308d1c646a2dfa9ae57350
+          test "$(git -C "$RUNNER_TEMP/gpu/Vulkan-Headers" rev-parse HEAD)" = 9fbc2a782ee3f8a4db64e7d991e23da75e893f44
+          echo 'KAZUMA_GPU_UPSTREAM=PINNED_PUBLIC_SOURCES_NO_GAME'
+      - name: Compilar codigo Vulkan REAL com alvo PS4 e apontar bloqueios de superficie
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$PS4SDK"
+          root="$RUNNER_TEMP/gpu"
+          driver="$root/vulkan-ps4"
+          mkdir -p "$RUNNER_TEMP/gpu-objects"
+          for src in vk_ps4_entry.c vk_ps4_swapchain.c; do
+            clang-18 --target=x86_64-pc-freebsd12-elf -std=c11 -O0 -g0 -fPIC \
+              -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -DORBIS -D__ORBIS__ -D__PS4__ -DVK_USE_PLATFORM_PS4 \
+              -isysroot "$sdk" -isystem "$sdk/include" \
+              -I"$driver/include" \
+              -I"$root/Vulkan-Headers/include" \
+              -I"$root/opengnm/include" \
+              -c "$driver/src/$src" -o "$RUNNER_TEMP/gpu-objects/$src.o"
+          done
+          llvm-nm-18 --defined-only "$RUNNER_TEMP/gpu-objects/vk_ps4_entry.c.o" \
+            | grep -E ' [Tt] vk_icdNegotiateLoaderICDInterfaceVersion$'
+          llvm-nm-18 --defined-only "$RUNNER_TEMP/gpu-objects/vk_ps4_swapchain.c.o" \
+            | grep -E ' [Tt] vk_ps4_CreateSwapchainKHR$'
+          echo 'KAZUMA_GPU_REAL_VULKAN_SOURCE_PS4_OBJECTS=COMPILED_NO_RENDERING'
+          # The game requires a real VkSurfaceKHR and WSI queries. The pinned
+          # Vulkan driver advertises VK_KHR_surface but does not dispatch these.
+          for sym in vkGetPhysicalDeviceSurfaceSupportKHR vkGetPhysicalDeviceSurfaceCapabilitiesKHR \
+                     vkGetPhysicalDeviceSurfaceFormatsKHR vkGetPhysicalDeviceSurfacePresentModesKHR \
+                     vkDestroySurfaceKHR; do
+            if grep -Eq "ENTRY\\($sym\\)" "$driver/src/vk_ps4_dispatch.c"; then
+              echo "KAZUMA_GPU_WSI_DRIVER_HAS_$sym=YES"
+            else
+              echo "KAZUMA_GPU_WSI_DRIVER_HAS_$sym=NO_MUST_IMPLEMENT"
+            fi
+          done
+          echo 'KAZUMA_GPU_FIRST_FRAME=NOT_PROVEN'
+      - name: Exercitar ponte Vulkan WSI REAL e compilar para PS4
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/gpu"
+          sdk="$PS4SDK"
+          git clone -q --filter=blob:none https://github.com/SwonDev/cstlvnia-blmont-to-macos.git "$root/upstream"
+          git -C "$root/upstream" checkout --detach 4043f21bb4f656d34cd17ba070238c7728d00631
+          test "$(git -C "$root/upstream" rev-parse HEAD)" = 4043f21bb4f656d34cd17ba070238c7728d00631
+          # This tests PRODUCTION code's exact platform.h contract on host.
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -pthread \
+            -I"$root/upstream/runtime/src" \
+            -I"$root/Vulkan-Headers/include" \
+            tools/etapa184/platform_ps4_vulkan_wsi.cpp \
+            tools/etapa184/test_ps4_vulkan_wsi_host.cpp \
+            -o "$RUNNER_TEMP/vulkan-wsi-host"
+          "$RUNNER_TEMP/vulkan-wsi-host"
+          # Production PS4 bridge compiled against pinned Vulkan-Headers and
+          # original platform.h; no fabricated swapchain or Castlevania image.
+          clang++-18 --target=x86_64-pc-freebsd12-elf -std=c++20 -O0 -g0 -fPIC \
+            -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
+            -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
+            -I"$root/upstream/runtime/src" -I"$root/Vulkan-Headers/include" \
+            -c tools/etapa184/platform_ps4_vulkan_wsi.cpp \
+            -o "$RUNNER_TEMP/gpu-objects/kazuma-vulkan-wsi-184.o"
+          # Same PS4 target object format as real Vulkan VideoOut driver.
+          ld.lld-18 -r -o "$RUNNER_TEMP/gpu-objects/kazuma-gpu-wsi-bundle.o" \
+            "$RUNNER_TEMP/gpu-objects/kazuma-vulkan-wsi-184.o" \
+            "$RUNNER_TEMP/gpu-objects/vk_ps4_entry.c.o" \
+            "$RUNNER_TEMP/gpu-objects/vk_ps4_swapchain.c.o"
+          llvm-nm-18 --defined-only "$RUNNER_TEMP/gpu-objects/kazuma-gpu-wsi-bundle.o" \
+            | grep -F 'lingshu_ps4_vkGetInstanceProcAddr'
+
+          echo 'KAZUMA_REAL_VULKAN_WSI_PS4_RELOCATABLE=LINKED_NO_GAME_NO_HARDWARE_TEST'
