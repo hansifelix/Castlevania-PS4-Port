@@ -23,7 +23,7 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends clang-18 llvm-18 lld-18 curl make python3-mako python3-ply
+          sudo apt-get install -y --no-install-recommends clang-18 llvm-18 lld-18 curl make python3-mako python3-ply python3-yaml
           mkdir -p "$RUNNER_TEMP/sdk" "$RUNNER_TEMP/dl"
           curl -fLsS --retry 3 --retry-delay 3 \
             https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz \
@@ -60,6 +60,18 @@ jobs:
           timeout 300s make -j2 -f Makefile.orbis generated
           test -s src/compiler/nir/nir_opcodes.h
           test -s src/amd/compiler/aco_opcodes.h
+          # Mesa's vendored Makefile omits three generated format files.
+          # Generate them using its own unmodified upstream generator.
+          python3 src/util/format/u_format_table.py src/util/format/u_format.yaml --enums \
+            > src/util/format/u_format_gen.h
+          python3 src/util/format/u_format_table.py src/util/format/u_format.yaml --header \
+            > src/util/format/u_format_pack.h
+          python3 src/util/format/u_format_table.py src/util/format/u_format.yaml \
+            > src/util/format/u_format_table.c
+          test -s src/util/format/u_format_gen.h
+          test -s src/util/format/u_format_pack.h
+          test -s src/util/format/u_format_table.c
+          echo 'KAZUMA186_MESA_FORMAT_GENERATORS=THREE_REQUIRED_OUTPUTS_CREATED'
           # Compile the actual shader frontend before the full Mesa library.
           timeout 180s make -j2 -f Makefile.orbis \
             CC=clang-18 CXX=clang++-18 AR=llvm-ar-18 \
