@@ -36,6 +36,8 @@ def run() -> None:
     cli.add_argument("--vulkan", type=Path)
     cli.add_argument("--out", type=Path)
     cli.add_argument("--audit-only", action="store_true")
+    cli.add_argument("--include-baseline", action="store_true",
+                     help="Include 14 original baseline objects (5 bridge objects are already in GPU bundle)")
     args = cli.parse_args()
     cmake = args.upstream / "CMakeLists.txt"
     original, duplicated = runtime_manifest(cmake.read_text(encoding="utf-8"))
@@ -52,10 +54,18 @@ def run() -> None:
         for src in missing:
             print("NEEDS_PS4_COMPILATION=" + src)
         return
+    baseline = [x for x in original if x in BASELINE_SOURCES
+                and x not in {
+                    "runtime/src/" + n + ".cpp"
+                    for n in ("vk_bridge", "vk_swapchain", "vk_present", "vk_gen", "hle_vi")
+                }]
+    selected = missing + (baseline if args.include_baseline else [])
+    if args.include_baseline:
+        assert len(baseline) == 14 and len(selected) == 82
     if not (args.sdk and args.compat and args.vulkan and args.out):
         cli.error("SDK, compat overlay, Vulkan headers and output are required")
     args.out.mkdir(parents=True, exist_ok=True)
-    for n, src in enumerate(missing, 1):
+    for n, src in enumerate(selected, 1):
         filename = args.upstream / src
         if not filename.is_file():
             raise FileNotFoundError(filename)
@@ -89,11 +99,14 @@ def run() -> None:
             "-include", "stdlib.h",
             "-c", str(build_input), "-o", str(output),
         ]
-        print(f"LINGSHU189_COMPILE={n}/{len(missing)}:{src}", flush=True)
+        print(f"LINGSHU189_COMPILE={n}/{len(selected)}:{src}", flush=True)
         subprocess.run(cmd, check=True, timeout=100)
         if output.stat().st_size == 0:
             raise RuntimeError("Empty PS4 object for " + src)
-    print("LINGSHU189_FULL_87_RUNTIME_OBJECTS_COMPILED_68_NEW_NO_GAME", flush=True)
+    if args.include_baseline:
+        print("LINGSHU190_82_RUNTIME_UNITS_PLUS_5_BRIDGE=COMPILED_PS4_WITHOUT_GAME", flush=True)
+    else:
+        print("LINGSHU189_FULL_87_RUNTIME_OBJECTS_COMPILED_68_NEW_NO_GAME", flush=True)
 
 
 if __name__ == "__main__":
