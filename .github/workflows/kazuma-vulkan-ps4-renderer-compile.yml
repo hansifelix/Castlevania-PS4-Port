@@ -142,3 +142,45 @@ jobs:
             | grep -F 'lingshu_ps4_vkGetInstanceProcAddr'
 
           echo 'KAZUMA_REAL_VULKAN_WSI_PS4_RELOCATABLE=LINKED_NO_GAME_NO_HARDWARE_TEST'
+      - name: Compilar TODO driver Vulkan e vincular com OpenGNM e ponte WSI
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/gpu"
+          sdk="$PS4SDK"
+          driver="$root/vulkan-ps4"
+          mkdir -p "$RUNNER_TEMP/gpu-full"
+          # ALL 21 original Vulkan ICD C units. Shader compiler libpsbc is
+          # intentionally not enabled in this check: no claim of rendering.
+          sources=(
+            vk_ps4_entry vk_ps4_dispatch vk_ps4_entrypoints vk_ps4_instance
+            vk_ps4_device vk_ps4_format vk_ps4_memory vk_ps4_buffer
+            vk_ps4_image vk_ps4_render_pass vk_ps4_shader vk_ps4_pipeline
+            vk_ps4_descriptor vk_ps4_command vk_ps4_swapchain vk_ps4_queue
+            vk_ps4_sync vk_ps4_query vk_ps4_stubs vk_ps4_vulkan11 vk_ps4_log
+          )
+          for base in "${sources[@]}"; do
+            clang-18 --target=x86_64-pc-freebsd12-elf -std=c11 -O0 -g0 -fPIC \
+              -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
+              -DORBIS -D__ORBIS__ -D__PS4__ -DVK_USE_PLATFORM_PS4 \
+              -isysroot "$sdk" -isystem "$sdk/include" \
+              -I"$driver/include" -I"$root/opengnm/include" \
+              -I"$root/Vulkan-Headers/include" \
+              -c "$driver/src/$base.c" -o "$RUNNER_TEMP/gpu-full/$base.o"
+          done
+          llvm-ar-18 rcs "$RUNNER_TEMP/gpu-full/libvulkan_ps4.a" "$RUNNER_TEMP/gpu-full/"*.o
+          test "$(llvm-ar-18 t "$RUNNER_TEMP/gpu-full/libvulkan_ps4.a" | wc -l)" -eq 21
+          echo 'KAZUMA_VULKAN_FULL_DRIVER_C_UNITS=21_COMPILED_NO_PSBC'
+          ld.lld-18 -m elf_x86_64 -r -o "$RUNNER_TEMP/gpu-full/kazuma-gnm-vulkan-wsi-all.o" \
+            "$RUNNER_TEMP/gpu-objects/kazuma-vulkan-wsi-184.o" \
+            --whole-archive "$RUNNER_TEMP/gpu-full/libvulkan_ps4.a" \
+            "$root/opengnm/libopengnm.a" --no-whole-archive
+          readelf -h "$RUNNER_TEMP/gpu-full/kazuma-gnm-vulkan-wsi-all.o" \
+            | grep -E 'Class:|Machine:'
+          llvm-nm-18 --defined-only "$RUNNER_TEMP/gpu-full/kazuma-gnm-vulkan-wsi-all.o" \
+            > "$RUNNER_TEMP/gpu-full/symbols.txt"
+          for name in sceGnmCmdInit vk_ps4_CreateSwapchainKHR lingshu_ps4_vkGetInstanceProcAddr; do
+            grep -F "$name" "$RUNNER_TEMP/gpu-full/symbols.txt"
+          done
+          echo 'KAZUMA_OPENGNM_VULKAN_WSI_FULL_RELOCATABLE=PASSED_NO_GAME_NO_SHADERS_NO_HARDWARE'
+
