@@ -82,6 +82,11 @@ jobs:
           test -s src/compiler/builtin_types.h
           test -s src/compiler/builtin_types.c
           echo 'KAZUMA186_MESA_BUILTIN_TYPES=GENERATED_AND_READY_FOR_COMPILATION'
+          python3 src/vulkan/util/vk_struct_type_cast_gen.py \
+            --xml ../Vulkan-Headers/registry/vk.xml --beta false \
+            --out src/vulkan/util/vk_struct_type_cast.h
+          test -s src/vulkan/util/vk_struct_type_cast.h
+          echo 'KAZUMA186_VULKAN_STRUCT_CAST=GENERATED_FROM_PINNED_VK_XML'
           # Compile the actual shader frontend before the full Mesa library.
           timeout 180s make -j2 -f Makefile.orbis \
             CC=clang-18 CXX=clang++-18 AR=llvm-ar-18 \
