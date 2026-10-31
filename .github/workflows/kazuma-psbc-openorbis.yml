@@ -122,3 +122,54 @@ jobs:
           grep -E -m 3 ' [Tt] psbc_(init|compile_shader|shutdown)' \
             "$RUNNER_TEMP/psbc-compiler-symbols.txt"
           echo 'KAZUMA186_REAL_PSBC_ORBIS_LINK=PASSED_NO_GPU_EXECUTION_NO_GAME'
+      - name: Ativar compilacao de shaders no driver Vulkan e vincular ao OpenGNM
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/shaders"
+          sdk="$PS4SDK"
+          cd "$root"
+          git clone -q --filter=blob:none https://github.com/PS4-OpenGNM/vulkan-ps4.git
+          git -C vulkan-ps4 checkout --detach f4d940b723771b3fe637e8ac0704bb5d6ab19622
+          cp opengnm/config.orbis.mak opengnm/config.mak
+          make -C opengnm -f Makefile lib OO_PS4_TOOLCHAIN="$sdk" \
+            CC=clang-18 AR=llvm-ar-18
+          test -s opengnm/libopengnm.a
+          mkdir -p "$RUNNER_TEMP/psbc-driver-objects"
+          driver="$root/vulkan-ps4"
+          sources=(
+            vk_ps4_entry vk_ps4_dispatch vk_ps4_entrypoints vk_ps4_instance
+            vk_ps4_device vk_ps4_format vk_ps4_memory vk_ps4_buffer
+            vk_ps4_image vk_ps4_render_pass vk_ps4_shader vk_ps4_pipeline
+            vk_ps4_descriptor vk_ps4_command vk_ps4_swapchain vk_ps4_queue
+            vk_ps4_sync vk_ps4_query vk_ps4_stubs vk_ps4_vulkan11 vk_ps4_log
+          )
+          for base in "${sources[@]}"; do
+            clang-18 --target=x86_64-pc-freebsd12-elf -std=c11 -O0 -g0 -fPIC \
+              -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
+              -DORBIS -D__ORBIS__ -D__PS4__ -DVK_USE_PLATFORM_PS4 \
+              -DVK_PS4_HAVE_PSBC=1 \
+              -isysroot "$sdk" -isystem "$sdk/include" \
+              -I"$driver/include" -I"$root/Vulkan-Headers/include" \
+              -I"$root/opengnm/include" -I"$root/opengnm-psbc/libpsbc" \
+              -I"$root/opengnm-psbc/include" \
+              -c "$driver/src/$base.c" \
+              -o "$RUNNER_TEMP/psbc-driver-objects/$base.o"
+          done
+          llvm-ar-18 rcs "$RUNNER_TEMP/libvulkan_ps4_shader_enabled.a" \
+            "$RUNNER_TEMP/psbc-driver-objects/"*.o
+          test "$(llvm-ar-18 t "$RUNNER_TEMP/libvulkan_ps4_shader_enabled.a" | wc -l)" -eq 21
+          ld.lld-18 -m elf_x86_64 -r \
+            -o "$RUNNER_TEMP/psbc-vulkan-opengnm-all.o" \
+            --whole-archive "$RUNNER_TEMP/libvulkan_ps4_shader_enabled.a" \
+              "$root/opengnm/libopengnm.a" \
+              "$root/opengnm-psbc/libpsbc.orbis.a" \
+            --no-whole-archive
+          readelf -h "$RUNNER_TEMP/psbc-vulkan-opengnm-all.o" | grep -E 'Class:|Machine:'
+          llvm-nm-18 --defined-only "$RUNNER_TEMP/psbc-vulkan-opengnm-all.o" \
+            > "$RUNNER_TEMP/all-graphics-defined.txt"
+          for symbol in vk_ps4_CreateShaderModule psbc_compile_shader sceGnmCmdInit; do
+            grep -F "$symbol" "$RUNNER_TEMP/all-graphics-defined.txt"
+          done
+          echo 'KAZUMA187_SHADER_ENABLED_VULKAN_OPENGNM_PSBC=RELOCATABLE_LINK_SUCCESS_NO_HARDWARE'
+
