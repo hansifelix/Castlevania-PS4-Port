@@ -9,6 +9,7 @@ on:
       - 'tools/etapa175/**'
       - 'tools/etapa176/**'
       - 'tools/etapa177/**'
+      - 'tools/etapa178/**'
       - '.github/workflows/kazuma-atomic16-openorbis.yml'
   push:
     branches: [main]
@@ -19,6 +20,7 @@ on:
       - 'tools/etapa175/**'
       - 'tools/etapa176/**'
       - 'tools/etapa177/**'
+      - 'tools/etapa178/**'
       - '.github/workflows/kazuma-atomic16-openorbis.yml'
 permissions:
   contents: read
@@ -184,6 +186,14 @@ jobs:
           s=s.replace("std::rotr(","lingshu_cpu_compat::rotr(")
           Path(sys.argv[2]).write_text(s,encoding="utf-8")
           PY_CPU
+          # Original runtime headers and actual PS4 layout-check source.
+          g++ -std=c++20 -O2 -Wall -Wextra -Werror -pthread \
+            -I"$RUNNER_TEMP/upstream/runtime/include" \
+            -I"$RUNNER_TEMP/upstream/runtime/src" \
+            tools/etapa178/ps4_guest_memory_layout_preflight.cpp \
+            tools/etapa178/test_guest_memory_layout.cpp \
+            -o "$RUNNER_TEMP/guest-layout-host"
+          "$RUNNER_TEMP/guest-layout-host"
           cat > "$RUNNER_TEMP/boot-probe.cpp" <<'CPP'
           #include <nx/module.h>
           #include <string>
@@ -206,7 +216,8 @@ jobs:
           void log_line(const char* s){std::fprintf(stderr,"%s\n",s);}
           }
           extern "C" bool lingshu_ps4_boot_images_present();
-          int main(){return lingshu_ps4_boot_images_present() ? 0 : 2;}
+          extern "C" bool lingshu_ps4_guest_layout_valid();
+          int main(){return (lingshu_ps4_guest_layout_valid() && lingshu_ps4_boot_images_present()) ? 0 : 2;}
           CPP
           clang++-18 --target=x86_64-pc-freebsd12-elf -std=c++20 -O2 -g0 -fPIC \
             -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
@@ -218,15 +229,23 @@ jobs:
             -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
             -I"$RUNNER_TEMP/compat" -I"$RUNNER_TEMP/upstream/runtime/include" -I"$RUNNER_TEMP/upstream/runtime/src" \
             -c "$RUNNER_TEMP/boot-probe.cpp" -o "$RUNNER_TEMP/boot-probe-ps4.o"
+          clang++-18 --target=x86_64-pc-freebsd12-elf -std=c++20 -O2 -g0 -fPIC \
+            -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
+            -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
+            -I"$RUNNER_TEMP/compat" -I"$RUNNER_TEMP/upstream/runtime/include" -I"$RUNNER_TEMP/upstream/runtime/src" \
+            -c tools/etapa178/ps4_guest_memory_layout_preflight.cpp -o "$RUNNER_TEMP/guest-layout-ps4.o"
+          llvm-nm-18 --defined-only "$RUNNER_TEMP/guest-layout-ps4.o" \
+            | grep -E ' [Tt] lingshu_ps4_guest_layout_valid$'
           llvm-nm-18 --defined-only "$RUNNER_TEMP/boot-preflight-ps4.o" \
             | grep -E ' [Tt] lingshu_ps4_boot_images_present$'
           ld.lld-18 -m elf_x86_64 -pie --script "$sdk/link.x" --eh-frame-hdr \
-            "$RUNNER_TEMP/boot-preflight-ps4.o" "$RUNNER_TEMP/boot-probe-ps4.o" \
+            "$RUNNER_TEMP/boot-preflight-ps4.o" "$RUNNER_TEMP/guest-layout-ps4.o" "$RUNNER_TEMP/boot-probe-ps4.o" \
             -L"$sdk/lib" -lc -lkernel -lc++ "$sdk/lib/crt1.o" \
             -o "$RUNNER_TEMP/boot-preflight-probe-ps4.elf"
           readelf -h "$RUNNER_TEMP/boot-preflight-probe-ps4.elf" \
             | grep -E 'Class:|Machine:|Type:'
           echo 'LINGSHU172_BOOT_PREFLIGHT_PS4_LINK=PASSED_NO_GAME_NO_HARDWARE_TEST'
+          echo 'LINGSHU178_GUEST_LAYOUT_PS4_LINK=PASSED_NO_GAME_NO_HARDWARE_TEST'
       - name: Vincular o adaptador de memoria para PS4 (OpenOrbis, sem jogo)
         shell: bash
         run: |
