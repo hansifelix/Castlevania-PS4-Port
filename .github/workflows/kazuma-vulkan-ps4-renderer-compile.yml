@@ -250,7 +250,7 @@ jobs:
           grep -F 'vk_ps4_CreateSwapchainKHR' "$RUNNER_TEMP/gpu-bridge/bridge-defined.txt"
           echo 'KAZUMA_NX_ORIGINAL_VULKAN_BRIDGE_PLUS_VI_HLE_PLUS_ICD=RELOCATABLE_OK_NO_GAME_NO_PS4_EXECUTION'
 
-      - name: Reconstruir os 67 arquivos ORIGINAIS de runtime ausentes na engine PS4
+      - name: Reconstruir os 68 arquivos ORIGINAIS de runtime ausentes na engine PS4
         shell: bash
         run: |
           set -euo pipefail
@@ -262,7 +262,7 @@ jobs:
             --vulkan "$root/Vulkan-Headers" \
             --out "$RUNNER_TEMP/ps4-runtime-full"
           count="$(find "$RUNNER_TEMP/ps4-runtime-full" -maxdepth 1 -name 'RT-*.o' -type f | wc -l)"
-          test "$count" -eq 67
+          test "$count" -eq 68
           # All original services/NVN modules must coexist with the genuine
           # upstream bridge, GNM driver and VideoOut surface adapter.
           ld.lld-18 -m elf_x86_64 -r \
@@ -271,4 +271,4 @@ jobs:
             "$RUNNER_TEMP/gpu-bridge/real-nx-vulkan-and-gpu.o"
           readelf -h "$RUNNER_TEMP/ps4-runtime-full-plus-vulkan.o" \
             | grep -E 'Class:|Machine:'
-          echo 'KAZUMA189_67_ORIGINAL_RUNTIME_PS4_OBJECTS_PLUS_GPU=RELOCATABLE_OK_NO_GAME'
+          echo 'KAZUMA189_68_ORIGINAL_RUNTIME_PS4_OBJECTS_PLUS_GPU=RELOCATABLE_OK_NO_GAME'
