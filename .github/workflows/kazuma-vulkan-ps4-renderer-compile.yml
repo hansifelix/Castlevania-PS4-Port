@@ -84,6 +84,29 @@ jobs:
             fi
           done
           echo 'KAZUMA_GPU_FIRST_FRAME=NOT_PROVEN'
+      - name: Compilar OpenGNM completo para PS4 e conectar ao driver Vulkan
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/gpu"
+          sdk="$PS4SDK"
+          cp "$root/opengnm/config.orbis.mak" "$root/opengnm/config.mak"
+          make -C "$root/opengnm" -f Makefile lib \
+            OO_PS4_TOOLCHAIN="$sdk" \
+            CC=clang-18 AR=llvm-ar-18
+          test -s "$root/opengnm/libopengnm.a"
+          count="$(llvm-ar-18 t "$root/opengnm/libopengnm.a" | wc -l)"
+          test "$count" -ge 25
+          printf 'KAZUMA_OPENGNM_REAL_ORBIS_ARCHIVE_OBJECTS=%s\n' "$count"
+          # Link every OpenGNM component into a relocatable PS4 object, not a
+          # synthetic triangle. This checks object architecture/compatibility.
+          ld.lld-18 -m elf_x86_64 -r -o "$RUNNER_TEMP/gpu-objects/opengnm-all-ps4.o" \
+            --whole-archive "$root/opengnm/libopengnm.a" --no-whole-archive
+          readelf -h "$RUNNER_TEMP/gpu-objects/opengnm-all-ps4.o" \
+            | grep -E 'Class:|Machine:'
+          llvm-nm-18 --defined-only "$RUNNER_TEMP/gpu-objects/opengnm-all-ps4.o" \
+            | grep -E ' [Tt] sceGnm' | head -n 7
+          echo 'KAZUMA_OPENGNM_ALL_SOURCES_CROSS_COMPILED=PASSED_PS4_OBJECT_NOT_EXECUTED'
       - name: Exercitar ponte Vulkan WSI REAL e compilar para PS4
         shell: bash
         run: |
