@@ -244,14 +244,21 @@ jobs:
             | grep -E ' [Tt] lingshu_ps4_guest_layout_valid$'
           llvm-nm-18 --defined-only "$RUNNER_TEMP/boot-preflight-ps4.o" \
             | grep -E ' [Tt] lingshu_ps4_boot_images_present$'
+          clang++-18 --target=x86_64-pc-freebsd12-elf -std=c++20 -O2 -g0 -fPIC \
+            -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
+            -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
+            -I"$RUNNER_TEMP/upstream/runtime/src" \
+            -c tools/etapa144/platform_ps4_posix_core.cpp \
+            -o "$RUNNER_TEMP/ps4-real-posix-core-180.o"
           ld.lld-18 -m elf_x86_64 -pie --script "$sdk/link.x" --eh-frame-hdr \
-            "$RUNNER_TEMP/boot-preflight-ps4.o" "$RUNNER_TEMP/guest-layout-ps4.o" "$RUNNER_TEMP/boot-probe-ps4.o" \
+            "$RUNNER_TEMP/boot-preflight-ps4.o" "$RUNNER_TEMP/guest-layout-ps4.o" "$RUNNER_TEMP/boot-probe-ps4.o" "$RUNNER_TEMP/ps4-real-posix-core-180.o" \
             -L"$sdk/lib" -lc -lkernel -lc++ "$sdk/lib/crt1.o" \
             -o "$RUNNER_TEMP/boot-preflight-probe-ps4.elf"
           readelf -h "$RUNNER_TEMP/boot-preflight-probe-ps4.elf" \
             | grep -E 'Class:|Machine:|Type:'
           echo 'LINGSHU172_BOOT_PREFLIGHT_PS4_LINK=PASSED_NO_GAME_NO_HARDWARE_TEST'
           echo 'LINGSHU178_GUEST_LAYOUT_PS4_LINK=PASSED_NO_GAME_NO_HARDWARE_TEST'
+          echo 'LINGSHU180_REAL_PS4_BOOT_LOGGER_LINK=PASSED_NO_GAME_NO_HARDWARE_TEST'
       - name: Vincular o adaptador de memoria para PS4 (OpenOrbis, sem jogo)
         shell: bash
         run: |
