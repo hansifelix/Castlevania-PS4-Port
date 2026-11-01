@@ -118,7 +118,13 @@ bool commit(uint64_t addr,uint64_t size) {
     std::lock_guard<std::mutex> lock(ranges_lock);
     if (vm_poisoned || !covered(lo,hi)) return false;
     if (mprotect(reinterpret_cast<void*>(static_cast<uintptr_t>(lo)),
-                 static_cast<size_t>(hi-lo),PROT_READ|PROT_WRITE)!=0) return false;
+                 static_cast<size_t>(hi-lo),PROT_READ|PROT_WRITE)!=0) {
+        // A failed protection update may have partially changed page access
+        // (kernel-dependent). Our writable ledger is no longer trustworthy.
+        // Refuse all future VM transitions rather than retrying blindly.
+        vm_poisoned = true;
+        return false;
+    }
     mark_writable(lo,hi);
     return true;
 }
