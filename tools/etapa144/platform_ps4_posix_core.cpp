@@ -14,6 +14,7 @@
 #include <mutex>
 #include <sys/stat.h>
 #include <cstring>
+#include <limits>
 
 namespace nx::plat {
 
@@ -25,7 +26,16 @@ int fseek64(FILE* file, int64_t offset, int whence) {
     return fseeko(file, static_cast<off_t>(offset), whence);
 }
 uint64_t read_at(FILE* file, int64_t offset, void* dest, uint64_t len) {
-    if (!file || !dest || offset < 0 || len > uint64_t(SSIZE_MAX)) return 0;
+    if (!file || !dest || offset < 0 || len == 0 ||
+        len > uint64_t(SSIZE_MAX)) return 0;
+    // pread takes a signed off_t. Never wrap offset+done or invoke the
+    // kernel with a span extending beyond the final representable byte.
+    // A truncated read may be preferable to overflow, but fail closed
+    // here so the caller never mistakes an out-of-range AOT/file address.
+    const uint64_t first=static_cast<uint64_t>(offset);
+    const uint64_t off_max=static_cast<uint64_t>(
+        std::numeric_limits<off_t>::max());
+    if (first > off_max || len-1 > off_max-first) return 0;
     const int fd = fileno(file);
     if (fd < 0) return 0;
     uint64_t done = 0;
