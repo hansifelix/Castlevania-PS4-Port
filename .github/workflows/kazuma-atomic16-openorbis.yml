@@ -16,6 +16,7 @@ on:
       - 'tools/etapa162/**'
       - 'tools/etapa144/**'
       - 'tools/etapa179/**'
+      - 'tools/etapa210/**'
       - '.github/workflows/kazuma-atomic16-openorbis.yml'
   push:
     branches: [main]
@@ -33,6 +34,7 @@ on:
       - 'tools/etapa162/**'
       - 'tools/etapa144/**'
       - 'tools/etapa179/**'
+      - 'tools/etapa210/**'
       - '.github/workflows/kazuma-atomic16-openorbis.yml'
 permissions:
   contents: read
@@ -62,6 +64,11 @@ jobs:
         run: |
           set -euo pipefail
           bash tools/etapa179/test_memory_179.sh
+      - name: Regressao de read_at real (offset, EINTR e leitura parcial)
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tools/etapa210/test_read_at_host.sh
       - name: Instalar clang 18 e SDK OpenOrbis v0.5.4 (SHA fixado)
         shell: bash
         run: |
