@@ -2,6 +2,7 @@
 // No game/AOT/ROM bytes. The only mocked boundary is the POSIX syscall.
 #include "platform.h"
 #include <cerrno>
+#include <climits>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
