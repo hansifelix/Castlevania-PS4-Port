@@ -16,6 +16,9 @@ namespace {
 struct Range { uint64_t first, end; };
 std::mutex ranges_lock;
 std::vector<Range> reservations;
+// Protected by ranges_lock. A failed cleanup/protection transition makes
+// subsequent VM operations unsafe until the process is restarted.
+bool vm_poisoned = false;
 // Track pages that are really writable after a successful mprotect.
 std::map<uint64_t,uint64_t> writable;
 void mark_writable(uint64_t lo,uint64_t hi) {
@@ -95,6 +98,7 @@ bool reserve(uint64_t addr,uint64_t size) {
         addr>static_cast<uint64_t>(UINTPTR_MAX) ||
         (size-1)>static_cast<uint64_t>(UINTPTR_MAX)-addr) return false;
     std::lock_guard<std::mutex> lock(ranges_lock);
+    if (vm_poisoned) return false;
     for (const auto& r:reservations)
         if (addr<r.end && r.first<addr+size) return false;
     // Never MAP_FIXED: it can evict unrelated memory.
@@ -102,7 +106,8 @@ bool reserve(uint64_t addr,uint64_t size) {
                  static_cast<size_t>(size),PROT_NONE,MAP_PRIVATE|MAP_ANONYMOUS,-1,0);
     if (p==MAP_FAILED) return false;
     if (reinterpret_cast<uintptr_t>(p)!=addr) {
-        munmap(p,static_cast<size_t>(size)); return false;
+        if (munmap(p,static_cast<size_t>(size))!=0) vm_poisoned = true;
+        return false;
     }
     reservations.push_back({addr,addr+size});
     return true;
@@ -111,9 +116,15 @@ bool commit(uint64_t addr,uint64_t size) {
     uint64_t lo=0,hi=0;
     if (!round_range(addr,size,page_bytes(),lo,hi)) return false;
     std::lock_guard<std::mutex> lock(ranges_lock);
-    if (!covered(lo,hi)) return false;
+    if (vm_poisoned || !covered(lo,hi)) return false;
     if (mprotect(reinterpret_cast<void*>(static_cast<uintptr_t>(lo)),
-                 static_cast<size_t>(hi-lo),PROT_READ|PROT_WRITE)!=0) return false;
+                 static_cast<size_t>(hi-lo),PROT_READ|PROT_WRITE)!=0) {
+        // A failed protection update may have partially changed page access
+        // (kernel-dependent). Our writable ledger is no longer trustworthy.
+        // Refuse all future VM transitions rather than retrying blindly.
+        vm_poisoned = true;
+        return false;
+    }
     mark_writable(lo,hi);
     return true;
 }
@@ -122,7 +133,7 @@ void decommit(uint64_t addr,uint64_t size) {
     const uint64_t page=page_bytes();
     if (!round_range(addr,size,page,lo,hi)) return;
     std::lock_guard<std::mutex> lock(ranges_lock);
-    if (!covered(lo,hi)) return;
+    if (vm_poisoned || !covered(lo,hi)) return;
     const uint64_t end=addr+size;
     const uint64_t inner_begin=(addr+page-1)&~(page-1);
     const uint64_t inner_end=end&~(page-1);
@@ -158,7 +169,14 @@ void decommit(uint64_t addr,uint64_t size) {
 #else
         std::memset(p,0,n);
 #endif
-        if (mprotect(p,n,PROT_NONE)==0) unmark_writable(r.first,r.end);
+        if (mprotect(p,n,PROT_NONE)==0) {
+            unmark_writable(r.first,r.end);
+        } else {
+            // Data may already have been discarded; the ledger cannot
+            // describe the actual protections reliably. Refuse future work.
+            vm_poisoned = true;
+            return;
+        }
     }
 }
 } // namespace nx::plat
