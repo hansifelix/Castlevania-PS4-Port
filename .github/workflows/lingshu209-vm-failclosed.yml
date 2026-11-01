@@ -1,0 +1,29 @@
+name: Lingshu 209 - VM fail-closed fault injection
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/lingshu209-vm-failclosed.yml'
+      - 'tools/etapa146/platform_ps4_virtual_memory.cpp'
+      - 'tools/etapa209/**'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  fault-injection:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test real adapter and injected madvise failure
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tools/etapa179/test_memory_179.sh
+          tmp="$(mktemp -d)"
+          trap 'rm -rf "$tmp"' EXIT
+          printf '%s\n' '#pragma once' '#include <cstdint>' 'namespace nx::plat {bool reserve(uint64_t,uint64_t);bool commit(uint64_t,uint64_t);void decommit(uint64_t,uint64_t);}' > "$tmp/platform.h"
+          g++ -std=c++20 -O1 -Wall -Wextra -Werror -pthread -I"$tmp" \
+            tools/etapa146/platform_ps4_virtual_memory.cpp \
+            tools/etapa209/test_madvise_failure.cpp \
+            -Wl,--wrap=madvise -Wl,--wrap=mprotect -o "$tmp/test"
+          "$tmp/test"

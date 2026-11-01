@@ -16,6 +16,8 @@ namespace {
 struct Range { uint64_t first, end; };
 std::mutex ranges_lock;
 std::vector<Range> reservations;
+// A syscall failure after a partial mapping transition makes state unknown.
+bool address_space_uncertain=false;
 // Track pages that are really writable after a successful mprotect.
 std::map<uint64_t,uint64_t> writable;
 void mark_writable(uint64_t lo,uint64_t hi) {
@@ -95,6 +97,7 @@ bool reserve(uint64_t addr,uint64_t size) {
         addr>static_cast<uint64_t>(UINTPTR_MAX) ||
         (size-1)>static_cast<uint64_t>(UINTPTR_MAX)-addr) return false;
     std::lock_guard<std::mutex> lock(ranges_lock);
+    if (address_space_uncertain) return false;
     for (const auto& r:reservations)
         if (addr<r.end && r.first<addr+size) return false;
     // Never MAP_FIXED: it can evict unrelated memory.
@@ -102,7 +105,8 @@ bool reserve(uint64_t addr,uint64_t size) {
                  static_cast<size_t>(size),PROT_NONE,MAP_PRIVATE|MAP_ANONYMOUS,-1,0);
     if (p==MAP_FAILED) return false;
     if (reinterpret_cast<uintptr_t>(p)!=addr) {
-        munmap(p,static_cast<size_t>(size)); return false;
+        if (munmap(p,static_cast<size_t>(size))!=0) address_space_uncertain=true;
+        return false;
     }
     reservations.push_back({addr,addr+size});
     return true;
@@ -111,7 +115,7 @@ bool commit(uint64_t addr,uint64_t size) {
     uint64_t lo=0,hi=0;
     if (!round_range(addr,size,page_bytes(),lo,hi)) return false;
     std::lock_guard<std::mutex> lock(ranges_lock);
-    if (!covered(lo,hi)) return false;
+    if (address_space_uncertain || !covered(lo,hi)) return false;
     if (mprotect(reinterpret_cast<void*>(static_cast<uintptr_t>(lo)),
                  static_cast<size_t>(hi-lo),PROT_READ|PROT_WRITE)!=0) return false;
     mark_writable(lo,hi);
@@ -122,7 +126,7 @@ void decommit(uint64_t addr,uint64_t size) {
     const uint64_t page=page_bytes();
     if (!round_range(addr,size,page,lo,hi)) return;
     std::lock_guard<std::mutex> lock(ranges_lock);
-    if (!covered(lo,hi)) return;
+    if (address_space_uncertain || !covered(lo,hi)) return;
     const uint64_t end=addr+size;
     const uint64_t inner_begin=(addr+page-1)&~(page-1);
     const uint64_t inner_end=end&~(page-1);
@@ -154,11 +158,19 @@ void decommit(uint64_t addr,uint64_t size) {
         void* p=reinterpret_cast<void*>(static_cast<uintptr_t>(r.first));
         const size_t n=static_cast<size_t>(r.end-r.first);
 #if defined(MADV_DONTNEED)
-        if (madvise(p,n,MADV_DONTNEED)!=0) std::memset(p,0,n);
+        if (madvise(p,n,MADV_DONTNEED)!=0) {
+            address_space_uncertain=true;
+            return; // Do not write to an uncertain mapping.
+        }
 #else
-        std::memset(p,0,n);
+        address_space_uncertain=true;
+        return; // No safe discard primitive available.
 #endif
-        if (mprotect(p,n,PROT_NONE)==0) unmark_writable(r.first,r.end);
+        if (mprotect(p,n,PROT_NONE)!=0) {
+            address_space_uncertain=true;
+            return; // MADV_DONTNEED already discarded the contents.
+        }
+        unmark_writable(r.first,r.end);
     }
 }
 } // namespace nx::plat
