@@ -28,6 +28,6 @@ g++ -std=c++20 -O2 -Wall -Wextra -Werror -pthread \
     -I"$tmp" "$root/tools/etapa146/platform_ps4_virtual_memory.cpp" \
     "$root/tools/etapa179/test_syscall_failures_179.cpp" \
     -o "$tmp/failures"
-for case in advice reprotect cleanup; do
+for case in advice reprotect cleanup commit; do
     "$tmp/failures" "$case"
 done
