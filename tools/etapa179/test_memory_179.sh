@@ -31,3 +31,12 @@ g++ -std=c++20 -O2 -Wall -Wextra -Werror -pthread \
 for case in advice reprotect cleanup commit; do
     "$tmp/failures" "$case"
 done
+
+# Force the adapter's logical page size to 16 KiB while using *real*
+# Linux syscalls (not a simulated PS4 kernel).
+g++ -std=c++20 -O2 -Wall -Wextra -Werror -pthread \
+    -Wl,--wrap=sysconf \
+    -I"$tmp" "$root/tools/etapa146/platform_ps4_virtual_memory.cpp" \
+    "$root/tools/etapa179/test_logical_16k_179.cpp" \
+    -o "$tmp/logical-16k"
+"$tmp/logical-16k"
