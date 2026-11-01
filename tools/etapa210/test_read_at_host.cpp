@@ -40,7 +40,7 @@ extern "C" ssize_t __wrap_pread(int fd, void* dest, size_t count, off_t offset) 
 }
 
 #define CHECK(expr) do { if (!(expr)) { \
-    std::fprintf(stderr,"LINGSHU210_READ_AT_FAILED line=%d: %s\\n",__LINE__,#expr); \
+    std::fprintf(stderr,"LINGSHU210_READ_AT_FAILED line=%d: %s\n",__LINE__,#expr); \
     return 1; } } while (0)
 
 int main() {
@@ -82,6 +82,6 @@ int main() {
     CHECK(nx::plat::read_at(f,0,out,3)==0 && calls==1); ++tests;
 
     CHECK(std::fclose(f)==0);
-    std::printf("LINGSHU210_READ_AT_REGRESSION=PASSED_%d_CASES_LINUX_HOST_ONLY\\n",tests);
+    std::printf("LINGSHU210_READ_AT_REGRESSION=PASSED_%d_CASES_LINUX_HOST_ONLY\n",tests);
     return 0;
 }
