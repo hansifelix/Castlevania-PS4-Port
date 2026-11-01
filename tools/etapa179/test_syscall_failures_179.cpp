@@ -13,9 +13,11 @@
 namespace {
 bool deny_madvise = false;
 bool deny_reprotect = false;
+bool deny_commit = false;
 bool deny_cleanup = false;
 int madvise_hits = 0;
 int reprotect_hits = 0;
+int commit_hits = 0;
 int cleanup_hits = 0;
 #define CHECK(x) do { if (!(x)) { \
     std::fprintf(stderr,"LINGSHU179_FAILURE_TEST failed: %s at line %d\\n",#x,__LINE__); \
@@ -35,6 +37,11 @@ extern "C" int __wrap_madvise(void* p, size_t size, int advice) {
     return __real_madvise(p,size,advice);
 }
 extern "C" int __wrap_mprotect(void* p, size_t size, int prot) {
+    if (deny_commit && prot == (PROT_READ|PROT_WRITE)) {
+        ++commit_hits;
+        errno = EACCES;
+        return -1;
+    }
     if (deny_reprotect && prot == PROT_NONE) {
         ++reprotect_hits;
         errno = EACCES;
@@ -89,6 +96,19 @@ int main(int argc,char** argv) {
     const uint64_t base=reinterpret_cast<uintptr_t>(hint);
     CHECK(munmap(hint,bytes)==0);
     CHECK(nx::plat::reserve(base,bytes));
+    if (mode=="commit") {
+        deny_commit=true;
+        CHECK(!nx::plat::commit(base,page));
+        deny_commit=false;
+        CHECK(commit_hits==1);
+        // An otherwise valid commit must now refuse to proceed. A second
+        // call should not reach the kernel because the adapter is poisoned.
+        CHECK(!nx::plat::commit(base+page,page));
+        CHECK(commit_hits==1);
+        CHECK(munmap(reinterpret_cast<void*>(static_cast<uintptr_t>(base)),bytes)==0);
+        std::puts("LINGSHU179_FAIL_CLOSED_COMMIT_MPROTECT=PASSED");
+        return 0;
+    }
     CHECK(nx::plat::commit(base,bytes));
     auto* mem=reinterpret_cast<unsigned char*>(static_cast<uintptr_t>(base));
     std::memset(mem,0x6b,bytes);
