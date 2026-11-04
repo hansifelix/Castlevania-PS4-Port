@@ -1,0 +1,18 @@
+name: Kazuma 242 - SPIR-V inventory gate (synthetic only)
+
+on:
+  pull_request:
+    paths:
+      - 'tools/etapa242/**'
+      - '.github/workflows/kazuma-etapa242-spirv-audit.yml'
+  workflow_dispatch:
+
+jobs:
+  host-spv-contract:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run ten synthetic tests (no game, no shader bytes)
+        run: python3 -m unittest discover -s tools/etapa242 -p 'test_*.py' -v
