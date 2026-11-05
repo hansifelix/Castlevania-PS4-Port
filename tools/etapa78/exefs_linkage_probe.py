@@ -48,7 +48,7 @@ def _image(raw: bytes) -> bytearray:
     return image
 
 
-def inspect_module(path: Path, expected: dict | None = None) -> tuple[dict, set[str], set[str]]:
+def inspect_module(path: Path, expected: dict | None = None) -> tuple[dict, set[str], set[str], set[str]]:
     if not path.is_file() or path.is_symlink():
         raise ValueError("Módulo ausente ou link simbólico: " + path.name)
     raw = path.read_bytes()
@@ -80,9 +80,9 @@ def inspect_module(path: Path, expected: dict | None = None) -> tuple[dict, set[
     if (symtab is None or strtab is None or syment != 24 or strtab < symtab
             or strtab > size or (strtab - symtab) % 24):
         raise ValueError("Tabela de símbolos inválida")
-    imported, defined = set(), set()
+    imported, defined, weak_imported = set(), set(), set()
     for pos in range(symtab, strtab, 24):
-        name_off, _, _, shndx, _, _ = struct.unpack_from("<IBBHQQ", image, pos)
+        name_off, info, _, shndx, _, _ = struct.unpack_from("<IBBHQQ", image, pos)
         if name_off == 0:
             continue
         start = strtab + name_off
@@ -94,6 +94,8 @@ def inspect_module(path: Path, expected: dict | None = None) -> tuple[dict, set[
         name = bytes(image[start:stop]).decode("utf-8", "replace")
         if name:
             (imported if shndx == 0 else defined).add(name)
+            if shndx == 0 and info >> 4 == 2:
+                weak_imported.add(name)
     types = Counter()
     rela_entries = 0
     for start_tag, length_tag in ((7, 8), (23, 2)):
@@ -128,6 +130,7 @@ def inspect_module(path: Path, expected: dict | None = None) -> tuple[dict, set[
         "flat_image_bytes": size,
         "dynamic_symbols": (strtab - symtab) // 24,
         "imported_unique": len(imported),
+        "imported_weak_unique": len(weak_imported),
         "exported_unique": len(defined),
         "rela_entries": rela_entries,
         "relr_entries": relr_count,
@@ -137,7 +140,7 @@ def inspect_module(path: Path, expected: dict | None = None) -> tuple[dict, set[
             if key not in {"ABS64", "GLOB_DAT", "JUMP_SLOT", "RELATIVE", "RELATIVE_RELR"}
         ),
     }
-    return metadata, imported, defined
+    return metadata, imported, defined, weak_imported
 
 
 def inspect_exefs(folder: Path, profile: dict | None = None) -> dict:
@@ -149,19 +152,22 @@ def inspect_exefs(folder: Path, profile: dict | None = None) -> dict:
         if not isinstance(items, list) or {x.get("name") for x in items} != set(MODULES):
             raise ValueError("Perfil sem exatamente main, sdk e subsdk0")
         expected = {item["name"]: item for item in items}
-    details, imported, defined = {}, {}, {}
+    details, imported, defined, weak_imported = {}, {}, {}, {}
     for name in MODULES:
-        details[name], imported[name], defined[name] = inspect_module(
+        details[name], imported[name], defined[name], weak_imported[name] = inspect_module(
             folder / name, expected.get(name))
     all_imports = set.union(*imported.values())
     all_defined = set.union(*defined.values())
     linkage = {}
     for name in MODULES:
         others = set.union(*(defined[n] for n in MODULES if n != name))
+        missing = imported[name] - others
         linkage[name] = {
             "imports_unique": len(imported[name]),
             "imports_resolved_other_module": len(imported[name] & others),
-            "imports_not_defined_other_module": len(imported[name] - others),
+            "imports_not_defined_other_module": len(missing),
+            "unresolved_weak_imports": len(missing & weak_imported[name]),
+            "unresolved_nonweak_imports": len(missing - weak_imported[name]),
         }
     return {
         "etapa": 78,
@@ -171,6 +177,9 @@ def inspect_exefs(folder: Path, profile: dict | None = None) -> dict:
         "unique_imports": len(all_imports),
         "imports_resolved_in_exefs": len(all_imports & all_defined),
         "imports_without_exefs_definition": len(all_imports - all_defined),
+        "imports_without_exefs_definition_nonweak": len(
+            set.union(*(imported[n] - defined[n] - weak_imported[n]
+                        for n in MODULES)) - all_defined),
         "unresolved_names_exported": False,
         "aot_generated": False,
         "ps4_boot_tested": False,
