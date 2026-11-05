@@ -16,7 +16,7 @@ O verificador `tools/etapa78/exefs_linkage_probe.py` verifica a assinatura e SHA
 
 Os únicos tipos normalizados encontrados foram `ABS64`, `GLOB_DAT`, `JUMP_SLOT` e `RELATIVE_RELR`. A agregação privada encontrou **1.213 nomes de importação únicos; 1.210 também aparecem definidos em algum dos três módulos; 3 não aparecem**. Isso **não** implica que restam apenas três funções para completar o port de PS4: a ligação ELF, o loader guest, a CPU, GPU, shaders e serviços do sistema ainda exigem integração.
 
-Os três sem definição ExeFS são uma rotina de inicialização thread-local e duas referências de profiler. É preciso confirmar tratamento correto (inclusive binds/weak) no runtime original antes de adicionar substitutos.
+Os três sem definição ExeFS são uma rotina de inicialização thread-local e duas referências de profiler. A inspeção privada dos campos ELF de `main` confirmou **bind=2 (weak) nas três**. O `runtime/src/loader.cpp` do upstream fixado resolve imports fracos ausentes colocando o addend no slot, sem acionar o erro `strict_imports`. Logo o inventário atual não encontrou import forte sem definição entre os três NSOs. Isso não prova que o restante do loader/serviços funciona no PS4.
 
 ## Como reproduzir localmente sem vazamento
 
@@ -41,7 +41,7 @@ Fixtures com assinatura NSO0, MOD0, tabelas de símbolos e RELA artificiais. O C
 
 ## Bloqueios seguintes
 
-1. Confirmar tratamento dos três nomes sem exportação nos módulos ExeFS pelo loader guest, sem silenciar falhas de símbolos obrigatórios.
+1. Conferir no ambiente PS4 a semântica do loader guest para as três importações weak ausentes (upstream tem caminho explícito), sem silenciar falhas de símbolos obrigatórios.
 2. Gerar AOT de `main`, `sdk`, `subsdk0` com recompilador AArch64→C++ fixado, mantendo fontes geradas privadas.
 3. Compilar/linkar com runtime OpenOrbis/Mesa RADV e validar no console; sem substituir gameplay por demos.
 4. Os relatórios 235–238 validam extração e inventário RomFS, mas a cobertura completa dos shaders exigidos pela build 1.1.0 e tradução NVN→SPIR-V **ainda não estão concluídas**.
