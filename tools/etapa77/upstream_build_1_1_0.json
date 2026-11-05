@@ -1,0 +1,23 @@
+{
+  "source_repository": "SwonDev/cstlvnia-blmont-to-macos",
+  "source_commit": "4043f21bb4f656d34cd17ba070238c7728d00631",
+  "source_path": "games/castlevania/build.json",
+  "content_version": "1.1.0",
+  "modules": [
+    {
+      "name": "main",
+      "build_id": "0f1169aa7d0fa4529c861f96adec306e00000000000000000000000000000000",
+      "nso_sha256_reference": "c71362eb3cc09826f209896d225de212863ed8bb261383893ee7555d52b46319"
+    },
+    {
+      "name": "sdk",
+      "build_id": "8af286d7bfb124125a15e96a39cb1ab7bb4c0180000000000000000000000000",
+      "nso_sha256_reference": "a1e55456e86a76b37a9ad7645ab85b0f47adc8cc5da20d33244961f31d751d44"
+    },
+    {
+      "name": "subsdk0",
+      "build_id": "8205ead9e1f93d8b2337feaddefac330fe6ace9e000000000000000000000000",
+      "nso_sha256_reference": "4ca34bbd65029c76bff1b53969aceac8326de458df0eba14265f05e126183669"
+    }
+  ]
+}
