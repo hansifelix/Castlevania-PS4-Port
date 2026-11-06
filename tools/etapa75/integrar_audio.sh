@@ -23,7 +23,7 @@ clang++-18 --target=x86_64-pc-freebsd12-elf -std=c++20 -O1 -fPIC \
 # Verificação textual e simbólica, além da compilação do objeto.
 llvm-nm-18 --defined-only "$out/kazuma80_brand.o" > "$report/MARCA_SIMBOLOS.nm"
 grep -q 'kazuma_port_credit' "$report/MARCA_SIMBOLOS.nm" || { echo 'Marca sem símbolo exportado' >&2; exit 3; }
-strings "$out/kazuma80_brand.o" | grep -q 'Kazuma Traduções' || { echo 'Atribuição UTF-8 ausente' >&2; exit 3; }
+LC_ALL=C grep -aFq 'Kazuma Traduções' "$out/kazuma80_brand.o" || { echo 'Atribuição UTF-8 ausente' >&2; exit 3; }
 echo '[75/2] Link parcial REAL - 87+ objetos, sem arquivos comerciais'
 ld.lld-18 -m elf_x86_64 -r -o "$out/kazuma75_runtime_partial.o" \
  "$out/kazuma74_runtime_partial.o" "$out/kazuma75_audio.o" "$out/kazuma80_brand.o" > "$report/LINK_PARCIAL.log" 2>&1 || { cat "$report/LINK_PARCIAL.log"; exit 4; }
