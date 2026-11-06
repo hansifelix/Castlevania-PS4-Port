@@ -42,6 +42,10 @@ def audit_cpp(directory: Path, expected_units: int | None = None) -> dict:
                 category = "undecodable"
             elif reason.startswith("udf"):
                 category = "udf"
+            elif reason.startswith("destino de excepción sin generar"):
+                category = "exception_landing_pad_unimplemented"
+            elif reason.startswith("stg "):
+                category = "stg"
             else:
                 category = "other"
             reasons[category] += 1
