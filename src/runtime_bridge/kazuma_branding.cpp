@@ -5,8 +5,8 @@
 #include "kazuma_branding.hpp"
 
 namespace {
-constexpr char kBrand[] = "Kazuma Traducoes";
-constexpr char kCredit[] = "Port PS4 experimental por Kazuma Traducoes";
+constexpr char kBrand[] = "Kazuma Traduções";
+constexpr char kCredit[] = "Port PS4 experimental por Kazuma Traduções";
 constexpr char kNotice[] = "Castlevania: Belmont's Curse - jogo original de seus respectivos titulares.";
 } // namespace
 
