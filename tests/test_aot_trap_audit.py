@@ -40,6 +40,18 @@ class TrapAuditTests(unittest.TestCase):
             r = audit_cpp(d)
             self.assertEqual(r["categories"], {"other": 1})
 
+    def test_exception_default_guard_and_stg(self):
+        with tempfile.TemporaryDirectory() as root:
+            d = Path(root)
+            (d / "code_132.cpp").write_text(
+                'default: nx::unimpl(c, lp_, "destino de excepción sin generar");\n'
+                'nx::unimpl(c, NXB + 0x62a7f0ull, "stg x8, [x8]");\n',
+                encoding="utf-8",
+            )
+            r = audit_cpp(d, 1)
+            self.assertEqual(r["categories"],
+                             {"exception_default_guard": 1, "stg": 1})
+
     def test_expected_count_fails_closed(self):
         with tempfile.TemporaryDirectory() as root:
             d = Path(root)
