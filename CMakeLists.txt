@@ -38,6 +38,7 @@ if(Python3_Interpreter_FOUND)
     add_test(NAME exefs_preflight COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_exefs_preflight.py")
     add_test(NAME exefs_revision COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_exefs_revision.py")
     add_test(NAME exefs_linkage COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_exefs_linkage.py")
+    add_test(NAME aot_coverage COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_aot_report_gate.py")
 endif()
 
 # Kazuma runtime etapa 3: relogio e sincronizacao testados somente no host.

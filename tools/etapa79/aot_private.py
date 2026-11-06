@@ -15,6 +15,9 @@ import re
 import subprocess
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+from tools.etapa81.aot_report_gate import parse_report
+
 MODULES = ("subsdk0", "sdk", "main")
 PINNED = "4043f21bb4f656d34cd17ba070238c7728d00631"
 PROFILE = Path(__file__).resolve().parents[1] / "etapa77" / "upstream_build_1_1_0.json"
@@ -139,6 +142,9 @@ def main() -> int:
         success = (returncode == 0 and (out / "funcs.h").is_file() and
                    (out / "table.cpp").is_file() and report_txt.is_file()
                    and len(cpp_files) > 0)
+        coverage = parse_report(report) if report else None
+        # AOT emitido pode conter instruções sem handler, caso do STG no SDK.
+        # Não declarar que o resultado está pronto para link só porque o processo retornou 0.
         summary = {
             "etapa": 79,
             "module": args.module,
@@ -147,6 +153,9 @@ def main() -> int:
             "exit_code": returncode,
             "timeout": error == "TIMEOUT",
             "aot_generated": success,
+            "aot_instruction_coverage": coverage,
+            "all_instructions_supported": bool(coverage and coverage["all_instructions_supported"]),
+            "aot_has_runtime_traps": bool(coverage and coverage["instructions_unhandled"]),
             "aot_partial_only_entry": bool(args.only_entry),
             "generated_code_translation_units": len(cpp_files),
             "report_first_line": report.splitlines()[0][:240] if report else "",
