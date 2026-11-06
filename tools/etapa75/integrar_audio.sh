@@ -14,9 +14,19 @@ clang++-18 --target=x86_64-pc-freebsd12-elf -std=c++20 -O1 -fPIC \
  -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
  -I"$sdk/include" -I"$KAZUMA_NX_SOURCE/runtime/src" \
  -c tools/etapa75/platform_ps4_audio.cpp -o "$out/kazuma75_audio.o" > "$report/COMPILACAO.log" 2>&1 || { cat "$report/COMPILACAO.log"; exit 3; }
+echo '[80/1] Compilando assinatura Kazuma Traduções para o runtime PS4'
+clang++-18 --target=x86_64-pc-freebsd12-elf -std=c++20 -O1 -fPIC \
+ -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
+ -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
+ -Isrc \
+ -c src/runtime_bridge/kazuma_branding.cpp -o "$out/kazuma80_brand.o" > "$report/COMPILACAO_MARCA.log" 2>&1 || { cat "$report/COMPILACAO_MARCA.log"; exit 3; }
+# Verificação textual e simbólica, além da compilação do objeto.
+llvm-nm-18 --defined-only "$out/kazuma80_brand.o" > "$report/MARCA_SIMBOLOS.nm"
+grep -q 'kazuma_port_credit' "$report/MARCA_SIMBOLOS.nm" || { echo 'Marca sem símbolo exportado' >&2; exit 3; }
+LC_ALL=C grep -aFq 'Kazuma Traduções' "$out/kazuma80_brand.o" || { echo 'Atribuição UTF-8 ausente' >&2; exit 3; }
 echo '[75/2] Link parcial REAL - 87+ objetos, sem arquivos comerciais'
 ld.lld-18 -m elf_x86_64 -r -o "$out/kazuma75_runtime_partial.o" \
- "$out/kazuma74_runtime_partial.o" "$out/kazuma75_audio.o" > "$report/LINK_PARCIAL.log" 2>&1 || { cat "$report/LINK_PARCIAL.log"; exit 4; }
+ "$out/kazuma74_runtime_partial.o" "$out/kazuma75_audio.o" "$out/kazuma80_brand.o" > "$report/LINK_PARCIAL.log" 2>&1 || { cat "$report/LINK_PARCIAL.log"; exit 4; }
 llvm-nm-18 -C -u "$out/kazuma74_runtime_partial.o" > "$report/ANTES.nm" || true
 llvm-nm-18 -C -u "$out/kazuma75_runtime_partial.o" > "$report/DEPOIS.nm" || true
 llvm-nm-18 -C --defined-only "$out/kazuma75_audio.o" > "$report/DEFINIDOS.nm"
