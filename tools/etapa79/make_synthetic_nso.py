@@ -21,7 +21,9 @@ def make_fixture(path: Path) -> None:
     image[FUNCTION_START:FUNCTION_START + len(CODE)] = CODE
     image[0x220:0x224] = b"MOD0"
     struct.pack_into("<i", image, 0x224, 0x20)  # dynamic: 0x240
-    # Outras quatro posições MOD0 sem tabelas EH/LSDA (0 para ausência).
+    # EH frame é ausente: ponteiro MOD0-relativo resolve para endereço zero.
+    struct.pack_into("<i", image, 0x230, -0x220)
+    struct.pack_into("<i", image, 0x234, -0x220)
     dynamic = ((6, 0x2e0), (5, 0x310), (11, 24), (0, 0))
     for i, (tag, value) in enumerate(dynamic):
         struct.pack_into("<qQ", image, 0x240 + i * 16, tag, value)
