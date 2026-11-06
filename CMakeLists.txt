@@ -23,6 +23,15 @@ target_link_libraries(test_guest_memory_plan PRIVATE guest_memory_plan)
 add_test(NAME test_guest_memory_plan COMMAND test_guest_memory_plan)
 
 add_test(NAME test_input COMMAND test_input)
+
+# Marca de autoria do trabalho de port — interface estável para o binário PS4.
+add_library(kazuma_port_brand STATIC src/runtime_bridge/kazuma_branding.cpp)
+target_include_directories(kazuma_port_brand PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+add_executable(test_kazuma_branding tests/test_kazuma_branding.cpp)
+target_link_libraries(test_kazuma_branding PRIVATE kazuma_port_brand)
+add_test(NAME test_kazuma_branding COMMAND test_kazuma_branding)
+
+
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
     add_test(NAME switch_audit COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_switch_audit.py")
