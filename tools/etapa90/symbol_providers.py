@@ -21,7 +21,7 @@ from typing import Iterable
 
 NM_PATTERN = re.compile(r"^\s*(?:(?:[0-9a-fA-F]+|[-]+)\s+)?(?P<kind>[A-Za-z?])\s+(?P<symbol>\S.*?)\s*$")
 MATH_SYMBOLS = frozenset(("ceil", "floor", "fma", "trunc"))
-DEFINED_GLOBAL = frozenset("ABCDGIRSTUVW")
+DEFINED_GLOBAL = frozenset("ABCDGIRSTVW")
 WEAK_GLOBAL = frozenset("VW")
 
 
