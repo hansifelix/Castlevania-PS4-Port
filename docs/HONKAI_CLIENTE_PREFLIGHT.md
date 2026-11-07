@@ -33,3 +33,15 @@ Os testes sintéticos criam APK falso, PE x86-64 sintético, ELF ARM64 sintétic
 Referência das restrições públicas HoYoverse: https://hsr.hoyoverse.com/en-us/news/111203?type=news e https://hsr.hoyoverse.com/en-us/news/111244
 
 Desenvolvimento no repositório público limitado a infraestrutura e arquivos de teste falsos.
+
+## 07/11 — Auditoria real da ABI das bibliotecas nativas dentro do APK
+
+O teste original relatava apenas **o nome da pasta** `lib/arm64-v8a`, `lib/x86_64` etc. Isso é insuficiente: o nome pode estar errado ou manipulado. Agora o inspetor lê somente o cabeçalho ELF de cada biblioteca `.so` listada no APK, compara arquitetura/classe ELF com a pasta declarada e retorna:
+
+- `native_header_checked`, `native_header_matching`, `native_header_mismatch` e `native_header_invalid`;
+- `native_library_abi_consistent` verdadeiro apenas se houver ao menos uma biblioteca e todas as bibliotecas inspecionadas forem coerentes;
+- `duplicate_zip_entries` para denunciar nomes ZIP repetidos.
+
+Arquitetura coerente **não** é prova de assinatura, segurança, origem, integridade, ausência de malware, possibilidade de rodar no PS4 ou compatibilidade de autenticação. Arquitetura suspeita é somente um sinal para parar a avaliação e examinar a procedência. Os novos testes fabricam bibliotecas ELF falsas com cabeçalhos ARM64 válidos, pastas x86-64 incoerentes e conteúdo não ELF. Nenhum APK real foi baixado ou executado.
+
+**Próximo bloqueio:** obter um cliente legítimo, local, de fonte conhecida para produzir relatório privado. Para um cliente modificado, executar login mesmo com conta nova continua arriscando o aparelho e credenciais; esta etapa não autoriza nenhuma tentativa de burlar autenticação ou antibot.
