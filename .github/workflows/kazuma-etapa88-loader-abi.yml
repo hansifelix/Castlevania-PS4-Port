@@ -106,6 +106,27 @@ jobs:
           fi
           printf 'UPSTREAM_SHA=4043f21bb4f656d34cd17ba070238c7728d00631\nOPENORBIS=v0.5.4\nCLANG=18\nLOADER_COMPILED=YES\nPROBE_COMPILED=YES\nPARTIAL_LINK=YES\nNX_CALL_RESOLVED=YES\nNX_UNIMPL_RESOLVED=YES\nREAL_AOT_INCLUDED=NO\nSTRICT_LINK=NO\nEBOOT=NO\nPKG=NO\n' > reports/etapa88/STATUS.txt
           echo 'Loader real e probe sintético vinculados: as duas assinaturas se resolveram.'
+      - name: Exportar somente loader público compilado (NENHUM dado comercial)
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/public_loader_bundle"
+          cp "$RUNNER_TEMP/private_build/loader.o" "$RUNNER_TEMP/public_loader_bundle/loader.o"
+          (cd "$RUNNER_TEMP/public_loader_bundle" && sha256sum loader.o > loader.sha256)
+          cat > "$RUNNER_TEMP/public_loader_bundle/build_info.txt" <<'META'
+          UPSTREAM_COMMIT=4043f21bb4f656d34cd17ba070238c7728d00631
+          SDK=OpenOrbis-v0.5.4
+          COMPILER=clang++-18
+          TARGET=x86_64-pc-freebsd12-elf
+          CONTENT=only public runtime/src/loader.cpp; no games, ROM, code_*.o or keys
+          META
+          test -s "$RUNNER_TEMP/public_loader_bundle/loader.o"
+      - name: Guardar loader.o público para link privado posterior
+        uses: actions/upload-artifact@v4
+        with:
+          name: kazuma89-loader-public-elf
+          path: ${{ runner.temp }}/public_loader_bundle/
+          retention-days: 14
+          if-no-files-found: error
       - name: Publicar apenas diagnóstico público (sem binário)
         if: always()
         uses: actions/upload-artifact@v4
