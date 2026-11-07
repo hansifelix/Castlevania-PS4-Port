@@ -22,6 +22,15 @@ add_executable(test_guest_memory_plan tests/test_guest_memory_plan.cpp)
 target_link_libraries(test_guest_memory_plan PRIVATE guest_memory_plan)
 add_test(NAME test_guest_memory_plan COMMAND test_guest_memory_plan)
 
+# Kazuma Port Core: reusable host-only guest module address validation.
+add_library(kazuma_port_core STATIC src/port_core/guest_module_index.cpp)
+target_include_directories(kazuma_port_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(kazuma_port_core PUBLIC guest_memory_plan)
+add_executable(test_guest_module_index tests/test_guest_module_index.cpp)
+target_link_libraries(test_guest_module_index PRIVATE kazuma_port_core)
+add_test(NAME test_guest_module_index COMMAND test_guest_module_index)
+
+
 add_test(NAME test_input COMMAND test_input)
 
 # Marca de autoria do trabalho de port — interface estável para o binário PS4.
