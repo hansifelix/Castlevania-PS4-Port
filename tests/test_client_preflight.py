@@ -1,4 +1,6 @@
 """Synthetic-only tests; never download or execute game files."""
+import hashlib
+import stat
 import struct
 import sys
 import tempfile
@@ -104,6 +106,65 @@ class ClientPreflightTests(unittest.TestCase):
             link.symlink_to(path)
             with self.assertRaises(ValueError):
                 inspect(link)
+
+
+    def test_rejects_duplicate_zip_member_names(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "dupes.apk"
+            with zipfile.ZipFile(path, "w") as z:
+                z.writestr("AndroidManifest.xml", b"ok")
+                # Duplicate entries are ambiguous even when Python can read them.
+                import warnings
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore", UserWarning)
+                    z.writestr("AndroidManifest.xml", b"evil")
+            with self.assertRaisesRegex(ValueError, "duplicate"):
+                inspect(path)
+
+    def test_rejects_traversal_and_backslash_paths(self):
+        with tempfile.TemporaryDirectory() as td:
+            for bad in ("../data.txt", "res/../evil.txt", r"res\\evil.txt", "/absolute"):
+                path = Path(td) / "bad.apk"
+                with zipfile.ZipFile(path, "w") as z:
+                    z.writestr("AndroidManifest.xml", b"synthetic")
+                    z.writestr(bad, b"unsafe")
+                with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, "unsafe path"):
+                    inspect(path)
+
+    def test_rejects_zip_bomb_like_ratio(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "compressed.apk"
+            with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_LZMA) as z:
+                z.writestr("AndroidManifest.xml", b"synthetic")
+                z.writestr("payload", b"\x00" * 4_000_000)
+            with self.assertRaisesRegex(ValueError, "compression ratio"):
+                inspect(path)
+
+    def test_rejects_symlink_metadata(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "symlink.apk"
+            link = zipfile.ZipInfo("link")
+            link.create_system = 3
+            link.external_attr = (stat.S_IFLNK | 0o777) << 16
+            with zipfile.ZipFile(path, "w") as z:
+                z.writestr("AndroidManifest.xml", b"synthetic")
+                z.writestr(link, b"etc/passwd")
+            with self.assertRaisesRegex(ValueError, "symlink"):
+                inspect(path)
+
+    def test_reference_hash_must_match_trusted_value(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "unknown.exe"
+            path.write_bytes(b"file bytes not executable")
+            expected = hashlib.sha256(path.read_bytes()).hexdigest()
+            result = inspect(path, expected_sha256=expected.upper())
+            self.assertTrue(result["reference_hash_matches"])
+            self.assertEqual(result["sha256"], expected)
+            self.assertEqual(result["malware_free"], "not_evaluated")
+            with self.assertRaisesRegex(ValueError, "mismatch"):
+                inspect(path, expected_sha256="0" * 64)
+            with self.assertRaisesRegex(ValueError, "64 hexadecimal"):
+                inspect(path, expected_sha256="invalid")
 
     def test_zip_not_fake_apk(self):
         with tempfile.TemporaryDirectory() as td:
