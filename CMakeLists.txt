@@ -59,6 +59,7 @@ if(Python3_Interpreter_FOUND)
     add_test(NAME aot_trap_audit COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_aot_trap_audit.py")
     add_test(NAME etapa86_partial_link COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_etapa86_partial_link.py")
     add_test(NAME etapa87_table_registry COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_aot_table_registry.py")
+    add_test(NAME honkai_client_preflight COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_client_preflight.py")
 endif()
 
 # Kazuma runtime etapa 3: relogio e sincronizacao testados somente no host.
