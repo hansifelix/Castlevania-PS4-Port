@@ -111,7 +111,7 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/public_loader_bundle"
           cp "$RUNNER_TEMP/private_build/loader.o" "$RUNNER_TEMP/public_loader_bundle/loader.o"
-          sha256sum "$RUNNER_TEMP/public_loader_bundle/loader.o" > "$RUNNER_TEMP/public_loader_bundle/loader.sha256"
+          (cd "$RUNNER_TEMP/public_loader_bundle" && sha256sum loader.o > loader.sha256)
           cat > "$RUNNER_TEMP/public_loader_bundle/build_info.txt" <<'META'
           UPSTREAM_COMMIT=4043f21bb4f656d34cd17ba070238c7728d00631
           SDK=OpenOrbis-v0.5.4
