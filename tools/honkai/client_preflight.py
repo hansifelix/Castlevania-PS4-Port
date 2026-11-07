@@ -50,7 +50,7 @@ def _check_zip_metadata(infos: list[zipfile.ZipInfo]) -> None:
         names.add(name)
         if (
             name.startswith("/")
-            or "\\\\" in name
+            or "\\" in name
             or any(p in {".", ".."} for p in name.split("/"))
         ):
             raise ValueError("ZIP contains an unsafe path")
