@@ -134,7 +134,7 @@ class ClientPreflightTests(unittest.TestCase):
     def test_rejects_zip_bomb_like_ratio(self):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "compressed.apk"
-            with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_DEFLATED) as z:
+            with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_LZMA) as z:
                 z.writestr("AndroidManifest.xml", b"synthetic")
                 z.writestr("payload", b"\x00" * 4_000_000)
             with self.assertRaisesRegex(ValueError, "compression ratio"):
