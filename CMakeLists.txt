@@ -30,6 +30,14 @@ add_executable(test_guest_module_index tests/test_guest_module_index.cpp)
 target_link_libraries(test_guest_module_index PRIVATE kazuma_port_core)
 add_test(NAME test_guest_module_index COMMAND test_guest_module_index)
 
+# Etapa 88: fail-closed check of AOT guest functions inside module text spans.
+add_library(kazuma_aot_text_bounds STATIC src/port_core/aot_text_bounds.cpp)
+target_include_directories(kazuma_aot_text_bounds PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(kazuma_aot_text_bounds PUBLIC kazuma_port_core)
+add_executable(test_aot_text_bounds tests/test_aot_text_bounds.cpp)
+target_link_libraries(test_aot_text_bounds PRIVATE kazuma_aot_text_bounds)
+add_test(NAME test_aot_text_bounds COMMAND test_aot_text_bounds)
+
 
 add_test(NAME test_input COMMAND test_input)
 
