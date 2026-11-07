@@ -31,7 +31,7 @@ def _sha256(path: Path) -> str:
 
 def _native_elf_arch(header: bytes) -> str | None:
     """Determine library ELF ABI from its actual header, not APK path labels."""
-    if len(header) < 20 or header[:4] != b"\\x7fELF":
+    if len(header) < 20 or header[:4] != b"\x7fELF":
         return None
     cls, endian = header[4], header[5]
     if cls not in (1, 2) or endian not in (1, 2):
