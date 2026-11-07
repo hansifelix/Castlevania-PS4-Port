@@ -4,6 +4,7 @@
 // EXIGE as três tabelas AOT reais no link final. NÃO há weak symbols,
 // ponteiros nulos artificiais ou implementação de fallback para mascarar ausência.
 // Os símbolos são definidos pelos respectivos table.cpp PRIVADOS, não aqui.
+#include <algorithm> // OpenOrbis libc++ include-order compatibility
 #include <nx/module.h>
 
 extern const nx::ModuleInfo nx_module_main;
