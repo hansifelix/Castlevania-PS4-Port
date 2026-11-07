@@ -1,4 +1,10 @@
-# Castlevania: Belmont's Curse — pesquisa de portabilidade para PS4
+# Kazuma Traduções — Castlevania: Belmont's Curse | Pesquisa para PS4
+
+> **Projeto independente da Kazuma Traduções.** Esta marca identifica as ferramentas, auditorias e adaptações originais deste laboratório, **não** a autoria ou a propriedade intelectual do jogo. Não somos afiliados nem endossados pelos titulares da obra. Todos os créditos originais e as licenças de componentes de terceiros devem ser preservados.
+>
+> **Identidade visual:** capas, ícone, banner, HUD e cenas originais não recebem marcas d'água. Uma assinatura discreta de contribuição técnica poderá entrar na seção de créditos/versão **somente depois de funcionamento real demonstrado**. Ferramentas e relatórios autorais já podem exibir a marca.
+
+
 
 > **Estado atual: laboratório experimental, não port jogável.** Este repositório **não** contém jogo, binários recompilados, `eboot.bin`, PKG instalável nem ferramentas para converter um NSP automaticamente.
 
