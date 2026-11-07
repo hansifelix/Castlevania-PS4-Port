@@ -28,6 +28,23 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+
+def _native_elf_arch(header: bytes) -> str | None:
+    """Determine library ELF ABI from its actual header, not APK path labels."""
+    if len(header) < 20 or header[:4] != b"\x7fELF":
+        return None
+    cls, endian = header[4], header[5]
+    if cls not in (1, 2) or endian not in (1, 2):
+        return None
+    machine = struct.unpack_from(("<" if endian == 1 else ">") + "H", header, 18)[0]
+    return {
+        (1, 3): "x86",
+        (2, 62): "x86_64",
+        (1, 40): "armeabi-v7a",
+        (2, 183): "arm64-v8a",
+    }.get((cls, machine))
+
+
 def inspect(path: Path, compute_hash: bool = False) -> dict:
     """Read-only format identification; no execution/unpacking of inputs."""
     if path.is_symlink() or not path.is_file():
@@ -53,11 +70,28 @@ def inspect(path: Path, compute_hash: bool = False) -> dict:
                 has_dex = any(re.fullmatch(r"classes(\d*)\.dex", x) for x in names)
                 architectures: set[str] = set()
                 lib_names: set[str] = set()
-                for name in names:
-                    found = APK_LIB_RE.fullmatch(name)
-                    if found:
-                        architectures.add(found.group(1).lower())
-                        lib_names.add(found.group(2).lower())
+                native_header_checked = 0
+                native_header_matching = 0
+                native_header_mismatch = 0
+                native_header_invalid = 0
+                for info in archive.infolist():
+                    found = APK_LIB_RE.fullmatch(info.filename)
+                    if not found:
+                        continue
+                    declared_arch = found.group(1).lower()
+                    architectures.add(declared_arch)
+                    lib_names.add(found.group(2).lower())
+                    # Only 32 bytes are needed for ELF class/arch; no extraction.
+                    with archive.open(info, "r") as stream:
+                        elf_header = stream.read(32)
+                    native_header_checked += 1
+                    actual_arch = _native_elf_arch(elf_header)
+                    if actual_arch is None:
+                        native_header_invalid += 1
+                    elif actual_arch != declared_arch:
+                        native_header_mismatch += 1
+                    else:
+                        native_header_matching += 1
                 out["format"] = "android_apk" if has_manifest else "zip_other"
                 out["architecture"] = ",".join(sorted(architectures)) or "unknown"
                 out["android_evidence"] = {
@@ -67,6 +101,16 @@ def inspect(path: Path, compute_hash: bool = False) -> dict:
                     "has_unity_native_library": "libunity" in lib_names,
                     "has_il2cpp_native_library": "libil2cpp" in lib_names,
                     "entry_count": len(names),
+                    "duplicate_zip_entries": len(names) - len(set(names)),
+                    "native_header_checked": native_header_checked,
+                    "native_header_matching": native_header_matching,
+                    "native_header_mismatch": native_header_mismatch,
+                    "native_header_invalid": native_header_invalid,
+                    "native_library_abi_consistent": (
+                        native_header_checked > 0
+                        and native_header_mismatch == 0
+                        and native_header_invalid == 0
+                    ),
                 }
                 out["assessment"] = (
                     "APK Android is NOT a native PS4 executable; platform adaptation required."
