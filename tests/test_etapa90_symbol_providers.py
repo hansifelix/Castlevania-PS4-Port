@@ -13,9 +13,9 @@ SCRIPT = Path(__file__).resolve().parents[1] / "tools" / "etapa90" / "symbol_pro
 
 class TestSymbolProviders(unittest.TestCase):
     def test_parse_nm_undefined_and_defined_global_only(self):
-        need = parse_nm(" U ceil\\n                 U _ZN2nx4callEv\\n0000 T main\\n", undefined=True)
+        need = parse_nm(" U ceil\n                 U _ZN2nx4callEv\n0000 T main\n", undefined=True)
         self.assertEqual(need, {"ceil", "_ZN2nx4callEv"})
-        defs = parse_nm("0000 T ceil\\n0001 t hidden\\n0002 W _ZN2nx4callEv\\n0003 U missing\\n", undefined=False)
+        defs = parse_nm("0000 T ceil\n0001 t hidden\n0002 W _ZN2nx4callEv\n0003 U missing\n", undefined=False)
         self.assertEqual(defs, {"ceil", "_ZN2nx4callEv"})
 
     def test_six_original_undefined_refs_and_real_provider_candidates(self):
@@ -54,8 +54,8 @@ class TestSymbolProviders(unittest.TestCase):
     def test_cli_missing_symbols_exit_2_and_no_providers(self):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td)
-            (path / "need.nm").write_text("                 U ceil\\n                 U trunc\\n", encoding="utf8")
-            (path / "provided.nm").write_text("00000 T ceil\\n", encoding="utf8")
+            (path / "need.nm").write_text("                 U ceil\n                 U trunc\n", encoding="utf8")
+            (path / "provided.nm").write_text("00000 T ceil\n", encoding="utf8")
             out = path / "out.json"
             result = subprocess.run([sys.executable, str(SCRIPT),
                 "--undefined", str(path / "need.nm"),
@@ -69,8 +69,8 @@ class TestSymbolProviders(unittest.TestCase):
     def test_cli_full_candidates_do_not_mean_final_link(self):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td)
-            (path / "need.nm").write_text(" U ceil\\n", encoding="utf8")
-            (path / "libm.nm").write_text("0000 T ceil\\n", encoding="utf8")
+            (path / "need.nm").write_text(" U ceil\n", encoding="utf8")
+            (path / "libm.nm").write_text("0000 T ceil\n", encoding="utf8")
             result = subprocess.run([sys.executable, str(SCRIPT),
                 "--undefined", str(path / "need.nm"),
                 "--defined", f"libm={path / 'libm.nm'}",
