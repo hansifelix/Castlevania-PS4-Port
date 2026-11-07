@@ -125,6 +125,41 @@ jobs:
           fi
           printf 'UPSTREAM_SHA=4043f21bb4f656d34cd17ba070238c7728d00631\nOPENORBIS=v0.5.4\nCLANG=18\nLOADER_COMPILED=YES\nMEMORY_COMPILED=YES\nPROBE_COMPILED=YES\nPARTIAL_LINK=YES\nNX_CALL_RESOLVED=YES\nNX_UNIMPL_RESOLVED=YES\nNX_COMMIT_RESOLVED=YES\nNX_VM_SET_RESOLVED=YES\nNX_PLAT_RESERVE_RESOLVED=YES\nNX_PLAT_COMMIT_RESOLVED=YES\nNX_PLAT_DECOMMIT_RESOLVED=YES\nREAL_AOT_INCLUDED=NO\nSTRICT_LINK=NO\nEBOOT=NO\nPKG=NO\n' > reports/etapa88/STATUS.txt
           echo 'Loader real e probe sintético vinculados: as duas assinaturas se resolveram.'
+      - name: Compilar registro triplo de modulos com OpenOrbis + teste sintético
+        run: |
+          set -euo pipefail
+          up="$KAZUMA_NX_SOURCE"
+          sdk="$OO_PS4_TOOLCHAIN"
+          out="$RUNNER_TEMP/private_build"
+          target_flags=(
+            --target=x86_64-pc-freebsd12-elf -std=c++20 -O0 -fPIC
+            -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE
+            -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1"
+            -I"$RUNNER_TEMP/compat" -I"$up/runtime/include"
+          )
+          clang++-18 "${target_flags[@]}" -c src/runtime_bridge/linked_modules_castlevania.cpp -o "$out/registry.o"
+          clang++-18 "${target_flags[@]}" -c tests/fixtures/linked_modules_synthetic.cpp -o "$out/synthetic_modules.o"
+          llvm-nm-18 -C -u "$out/registry.o" > reports/etapa88/REGISTRY_REQUIRES.nm
+          for name in nx_module_main nx_module_sdk nx_module_subsdk0; do
+            grep -Fq " U ${name}" reports/etapa88/REGISTRY_REQUIRES.nm \
+              || { echo "FAIL: registro nao exige ${name}"; exit 1; }
+          done
+          ld.lld-18 -m elf_x86_64 -r -o "$out/three_module_registry_test.o" "$out/registry.o" "$out/synthetic_modules.o"
+          llvm-nm-18 -C -u "$out/three_module_registry_test.o" > reports/etapa88/REGISTRY_TEST_UNDEFINED.nm
+          if grep -E 'nx_module_(main|sdk|subsdk0)$' reports/etapa88/REGISTRY_TEST_UNDEFINED.nm; then
+            echo 'FAIL: registro continua indefinido apesar das tres fixtures'
+            exit 1
+          fi
+          llvm-nm-18 -C --defined-only "$out/three_module_registry_test.o" > reports/etapa88/REGISTRY_DEFINED.nm
+          grep -Fq 'nx::linked_modules()' reports/etapa88/REGISTRY_DEFINED.nm
+          clang++-18 -std=c++20 -O0 -I"$RUNNER_TEMP/compat" -I"$up/runtime/include" \
+            src/runtime_bridge/linked_modules_castlevania.cpp \
+            tests/fixtures/linked_modules_synthetic.cpp \
+            tests/fixtures/test_linked_modules_contract.cpp \
+            -o "$out/registry_host_test"
+          "$out/registry_host_test" | tee reports/etapa88/REGISTRY_HOST_TEST.txt
+          printf 'REGISTRY_COMPILED_FOR_PS4=YES\nREGISTRY_THREE_REFERENCES_REQUIRED=YES\nREGISTRY_THREE_SYNTHETIC_DEFINITIONS_LINK=YES\nREGISTRY_ORDER_MAIN_SDK_SUBSDK0=YES\nREAL_TABLES_USED=NO\nSTRICT_GAME_LINK=NO\n' \
+            > reports/etapa88/REGISTRY_STATUS.txt
       - name: Exportar somente loader público compilado (NENHUM dado comercial)
         run: |
           set -euo pipefail
@@ -132,7 +167,8 @@ jobs:
           cp "$RUNNER_TEMP/private_build/loader.o" "$RUNNER_TEMP/public_loader_bundle/loader.o"
           cp "$RUNNER_TEMP/private_build/memory.o" "$RUNNER_TEMP/public_loader_bundle/memory.o"
           cp "$RUNNER_TEMP/private_build/ps4_memory.o" "$RUNNER_TEMP/public_loader_bundle/ps4_memory.o"
-          (cd "$RUNNER_TEMP/public_loader_bundle" && sha256sum loader.o memory.o ps4_memory.o > objects.sha256)
+          cp "$RUNNER_TEMP/private_build/registry.o" "$RUNNER_TEMP/public_loader_bundle/registry.o"
+          (cd "$RUNNER_TEMP/public_loader_bundle" && sha256sum loader.o memory.o ps4_memory.o registry.o > objects.sha256)
           cat > "$RUNNER_TEMP/public_loader_bundle/build_info.txt" <<'META'
           UPSTREAM_COMMIT=4043f21bb4f656d34cd17ba070238c7728d00631
           SDK=OpenOrbis-v0.5.4
@@ -143,10 +179,11 @@ jobs:
           test -s "$RUNNER_TEMP/public_loader_bundle/loader.o"
           test -s "$RUNNER_TEMP/public_loader_bundle/memory.o"
           test -s "$RUNNER_TEMP/public_loader_bundle/ps4_memory.o"
+          test -s "$RUNNER_TEMP/public_loader_bundle/registry.o"
       - name: Guardar loader.o público para link privado posterior
         uses: actions/upload-artifact@v4
         with:
-          name: kazuma-public-loader-memory-elf
+          name: kazuma-public-loader-memory-registry-elf
           path: ${{ runner.temp }}/public_loader_bundle/
           retention-days: 14
           if-no-files-found: error
