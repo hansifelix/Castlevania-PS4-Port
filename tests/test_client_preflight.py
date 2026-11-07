@@ -27,6 +27,47 @@ class ClientPreflightTests(unittest.TestCase):
             self.assertFalse(result["signature_verified"])
             self.assertFalse(result["executes_game"])
 
+
+    def test_elf_header_agrees_with_android_abi(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "realistic.apk"
+            arm64 = bytearray(64)
+            arm64[:4] = b"\x7fELF"
+            arm64[4:6] = b"\x02\x01"  # ELF64, little-endian
+            struct.pack_into("<H", arm64, 18, 183)  # AArch64
+            with zipfile.ZipFile(path, "w") as z:
+                z.writestr("AndroidManifest.xml", b"synthetic")
+                z.writestr("lib/arm64-v8a/libunity.so", arm64)
+            evidence = inspect(path)["android_evidence"]
+            self.assertEqual(evidence["native_header_checked"], 1)
+            self.assertEqual(evidence["native_header_matching"], 1)
+            self.assertEqual(evidence["native_header_mismatch"], 0)
+            self.assertTrue(evidence["native_library_abi_consistent"])
+
+    def test_mislabelled_native_library_flagged(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "mislabelled.apk"
+            arm64 = bytearray(64)
+            arm64[:4] = b"\x7fELF"
+            arm64[4:6] = b"\x02\x01"
+            struct.pack_into("<H", arm64, 18, 183)
+            with zipfile.ZipFile(path, "w") as z:
+                z.writestr("AndroidManifest.xml", b"synthetic")
+                z.writestr("lib/x86_64/libunity.so", arm64)
+            evidence = inspect(path)["android_evidence"]
+            self.assertEqual(evidence["native_header_mismatch"], 1)
+            self.assertFalse(evidence["native_library_abi_consistent"])
+
+    def test_fake_native_library_flagged(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "fake.apk"
+            with zipfile.ZipFile(path, "w") as z:
+                z.writestr("AndroidManifest.xml", b"synthetic")
+                z.writestr("lib/arm64-v8a/libil2cpp.so", b"not ELF")
+            evidence = inspect(path)["android_evidence"]
+            self.assertEqual(evidence["native_header_invalid"], 1)
+            self.assertFalse(evidence["native_library_abi_consistent"])
+
     def test_pe_windows_x64(self):
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "synthetic.exe"
