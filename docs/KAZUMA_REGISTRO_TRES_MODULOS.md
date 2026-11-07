@@ -41,6 +41,22 @@ Compilamos as tabelas em diretório privado usando **Clang do host com declaraç
 
 **Limite crucial:** compilar com headers mínimos do host não equivale a compilar todas as tabelas com headers OpenOrbis reais. Este é apenas um teste de layout/assinatura/registro e link relocável, não um executável. Não se trata de testes em PS4. As tabelas, C++ e ELF comercial derivado permaneceram exclusivamente no ambiente privado e não foram versionados.
 
+## Link privado adicional com 73 objetos reais e runtime
+
+Sem recompilar nenhum dos arquivos anteriores, recuperamos e validamos via SHA-256 **73 objetos ELF reais** do `subsdk0`, além dos objetos públicos `loader.o`, `memory.o`, `ps4_memory.o` compilados no CI com OpenOrbis.
+
+O comando `ld.lld -m elf_x86_64 -r` ligou **3 tabelas AOT reais + registry.o + 73 objetos subsdk0 + loader + memory + PS4 memory**, sem erro. ELF resultante: **122.577.216 bytes**, mantido só em ambiente privado. No `nm -C -u`:
+
+| Referência a função AOT | Indefinida no teste |
+|---|---:|
+| main | 401.987 |
+| sdk | 40.112 |
+| subsdk0 | **0** |
+
+Os três símbolos `nx_module_*`, `nx::call` e `nx::unimpl` também deixaram de aparecer como indefinidos. Além dos 442.099 corpos de funções não compilados dos módulos `main`/`sdk`, restam **97 outros símbolos externos** de runtime e bibliotecas, esperados neste link **-r**. As tabelas foram recompiladas em Clang host com structs ABI equivalentes, portanto este não é teste definitivo do conjunto completo OpenOrbis nem prova de execução no console.
+
+**Próximo bloqueio mensurável:** compilar e ligar as 136 unidades C++ do `sdk`, resolver semântica STG, depois as 1.707 unidades de `main` e os MOV não suportados. A integração de serviços e NVN/SPIR-V permanece pendente.
+
 ## Bloqueio real seguinte
 
 1. Fazer um link privado **com registro + três tabelas reais + 73 objetos reais subsdk0** usando versões compiladas com ABI uniforme e reportar os módulos ainda indefinidos. Em particular, não fingir que `main` e `sdk` estão compilados porque suas tabelas já foram ligadas.
