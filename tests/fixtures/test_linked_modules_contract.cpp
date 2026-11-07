@@ -1,3 +1,4 @@
+#include <algorithm> // OpenOrbis libc++ include-order compatibility
 #include <nx/module.h>
 #include <cstring>
 #include <cstdio>
