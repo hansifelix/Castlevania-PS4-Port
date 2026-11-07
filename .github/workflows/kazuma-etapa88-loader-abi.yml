@@ -92,6 +92,8 @@ jobs:
             2> reports/etapa88/LOADER_COMPILE.log
           clang++-18 "${flags[@]}" -c "$up/runtime/src/memory.cpp" -o "$out/memory.o" \
             2> reports/etapa88/MEMORY_COMPILE.log
+          clang++-18 "${flags[@]}" -c tools/etapa50/platform_ps4_memory.cpp -o "$out/ps4_memory.o" \
+            2> reports/etapa88/PS4_MEMORY_COMPILE.log
           clang++-18 "${flags[@]}" -c tools/etapa88/runtime_abi_probe.cpp -o "$out/probe.o" \
             2> reports/etapa88/PROBE_COMPILE.log
           llvm-nm-18 -C --defined-only "$out/loader.o" > reports/etapa88/LOADER_DEFINED.nm
@@ -101,19 +103,27 @@ jobs:
           llvm-nm-18 -C --defined-only "$out/memory.o" > reports/etapa88/MEMORY_DEFINED.nm
           grep -Fq 'nx::commit(unsigned long, unsigned long)' reports/etapa88/MEMORY_DEFINED.nm
           grep -Fq 'nx::vm_set(unsigned long, unsigned long, unsigned int, unsigned int)' reports/etapa88/MEMORY_DEFINED.nm
+          llvm-nm-18 -C --defined-only "$out/ps4_memory.o" > reports/etapa88/PS4_MEMORY_DEFINED.nm
+          for name in 'nx::plat::reserve(unsigned long, unsigned long)' 'nx::plat::commit(unsigned long, unsigned long)' 'nx::plat::decommit(unsigned long, unsigned long)'; do
+            grep -Fq "$name" reports/etapa88/PS4_MEMORY_DEFINED.nm
+          done
           grep -Fq 'nx::call(nx::CPU&, unsigned long)' reports/etapa88/PROBE_UNDEFINED.nm
           grep -Fq 'nx::unimpl(nx::CPU&, unsigned long, char const*)' reports/etapa88/PROBE_UNDEFINED.nm
-          ld.lld-18 -m elf_x86_64 -r -o "$out/loader_plus_probe.o" "$out/loader.o" "$out/memory.o" "$out/probe.o"
+          ld.lld-18 -m elf_x86_64 -r -o "$out/loader_plus_probe.o" "$out/loader.o" "$out/memory.o" "$out/ps4_memory.o" "$out/probe.o"
           llvm-nm-18 -C -u "$out/loader_plus_probe.o" > reports/etapa88/POST_LINK_UNDEFINED.nm
           if grep -Eq 'nx::(call|unimpl)\(' reports/etapa88/POST_LINK_UNDEFINED.nm; then
             echo 'FAIL: call/unimpl seguem indefinidos mesmo após link com loader real'
+            exit 1
+          fi
+          if grep -Eq 'nx::plat::(reserve|commit|decommit)\(' reports/etapa88/POST_LINK_UNDEFINED.nm; then
+            echo 'FAIL: PS4 platform virtual memory operations still undefined'
             exit 1
           fi
           if grep -Eq 'nx::(commit|vm_set)\(' reports/etapa88/POST_LINK_UNDEFINED.nm; then
             echo 'FAIL: commit/vm_set seguem indefinidos apos link com memory.cpp upstream'
             exit 1
           fi
-          printf 'UPSTREAM_SHA=4043f21bb4f656d34cd17ba070238c7728d00631\nOPENORBIS=v0.5.4\nCLANG=18\nLOADER_COMPILED=YES\nMEMORY_COMPILED=YES\nPROBE_COMPILED=YES\nPARTIAL_LINK=YES\nNX_CALL_RESOLVED=YES\nNX_UNIMPL_RESOLVED=YES\nNX_COMMIT_RESOLVED=YES\nNX_VM_SET_RESOLVED=YES\nREAL_AOT_INCLUDED=NO\nSTRICT_LINK=NO\nEBOOT=NO\nPKG=NO\n' > reports/etapa88/STATUS.txt
+          printf 'UPSTREAM_SHA=4043f21bb4f656d34cd17ba070238c7728d00631\nOPENORBIS=v0.5.4\nCLANG=18\nLOADER_COMPILED=YES\nMEMORY_COMPILED=YES\nPROBE_COMPILED=YES\nPARTIAL_LINK=YES\nNX_CALL_RESOLVED=YES\nNX_UNIMPL_RESOLVED=YES\nNX_COMMIT_RESOLVED=YES\nNX_VM_SET_RESOLVED=YES\nNX_PLAT_RESERVE_RESOLVED=YES\nNX_PLAT_COMMIT_RESOLVED=YES\nNX_PLAT_DECOMMIT_RESOLVED=YES\nREAL_AOT_INCLUDED=NO\nSTRICT_LINK=NO\nEBOOT=NO\nPKG=NO\n' > reports/etapa88/STATUS.txt
           echo 'Loader real e probe sintético vinculados: as duas assinaturas se resolveram.'
       - name: Exportar somente loader público compilado (NENHUM dado comercial)
         run: |
@@ -121,16 +131,18 @@ jobs:
           mkdir -p "$RUNNER_TEMP/public_loader_bundle"
           cp "$RUNNER_TEMP/private_build/loader.o" "$RUNNER_TEMP/public_loader_bundle/loader.o"
           cp "$RUNNER_TEMP/private_build/memory.o" "$RUNNER_TEMP/public_loader_bundle/memory.o"
-          (cd "$RUNNER_TEMP/public_loader_bundle" && sha256sum loader.o memory.o > objects.sha256)
+          cp "$RUNNER_TEMP/private_build/ps4_memory.o" "$RUNNER_TEMP/public_loader_bundle/ps4_memory.o"
+          (cd "$RUNNER_TEMP/public_loader_bundle" && sha256sum loader.o memory.o ps4_memory.o > objects.sha256)
           cat > "$RUNNER_TEMP/public_loader_bundle/build_info.txt" <<'META'
           UPSTREAM_COMMIT=4043f21bb4f656d34cd17ba070238c7728d00631
           SDK=OpenOrbis-v0.5.4
           COMPILER=clang++-18
           TARGET=x86_64-pc-freebsd12-elf
-          CONTENT=only public runtime/src/loader.cpp + runtime/src/memory.cpp; no games, ROM, code_*.o or keys
+          CONTENT=public upstream loader.cpp + memory.cpp plus Kazuma PS4 platform memory adapter; no ROM, code_*.o or keys
           META
           test -s "$RUNNER_TEMP/public_loader_bundle/loader.o"
           test -s "$RUNNER_TEMP/public_loader_bundle/memory.o"
+          test -s "$RUNNER_TEMP/public_loader_bundle/ps4_memory.o"
       - name: Guardar loader.o público para link privado posterior
         uses: actions/upload-artifact@v4
         with:
