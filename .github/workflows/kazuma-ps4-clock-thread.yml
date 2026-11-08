@@ -139,7 +139,7 @@ jobs:
             name="$(basename "$source" .cpp)"
             obj="build/clock-thread/$name.o"
             clang++-18 --target=x86_64-pc-freebsd12-elf -std=c++20 -O1 -fPIC \
-              -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
+              -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -DKAZUMA_PS4=1 \
               -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
               -I"$RUNNER_TEMP/compat" -I"$src/runtime/include" -I"$src/runtime/src" \
               -include cstdlib -I"src/ps4" -c "$source" -o "$obj"
