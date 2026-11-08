@@ -15,7 +15,7 @@ Todos os 1.916 objetos e 319 arquivos passaram na auditoria de hash e arquitetur
 
 ## Links relocáveis, executados de verdade
 
-1. `ld.lld -m elf_x86_64 -r` com **1.707 objetos** do `main`: **PASSOU**, saída 1.537.??? bytes (tamanho do link principal disponível no relatório privado).
+1. `ld.lld -m elf_x86_64 -r` com **1.707 objetos** do `main`: **PASSOU**, saída 1.537.132.752 bytes.
 2. Mesmo comando com **136 objetos** do `sdk`: **PASSOU**, saída **118.145.008 bytes**.
 3. Mesmo comando com **73 objetos** do `subsdk0`: **PASSOU**, saída **59.286.112 bytes**.
 4. Mesmo comando com **três módulos de código**: **PASSOU**, **1.714.491.776 bytes**, ainda sem tabelas.
