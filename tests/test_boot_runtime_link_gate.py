@@ -4,7 +4,7 @@ import sys
 import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools.link.boot_runtime_link_gate import (
-    inspect, PROVIDERS, KERNEL_PROVIDERS, HORIZON_SERVICE_PROVIDERS, PROPRIETARY_MODULES, VIDEOOUT_IMPORTS
+    inspect, PROVIDERS, KERNEL_PROVIDERS, HORIZON_SERVICE_PROVIDERS, FILE_IO_PROVIDERS, PROPRIETARY_MODULES, VIDEOOUT_IMPORTS
 )
 
 def listing(items, ty):
@@ -51,6 +51,22 @@ class BootLinkTest(unittest.TestCase):
         result = inspect(complete, UNDEFINED + " U " + one + "\n", require_kernel=True, require_services=True)
         self.assertEqual(result["status"], "FAIL")
         self.assertIn(one, result["public_providers_still_undefined"])
+
+    def test_real_posix_fs_providers_required_only_for_new_link(self):
+        base = listing(PROVIDERS | KERNEL_PROVIDERS | HORIZON_SERVICE_PROVIDERS, "T")
+        r = inspect(base, UNDEFINED, require_file_io=True)
+        self.assertEqual(r["status"], "FAIL")
+        self.assertEqual(set(r["missing_or_duplicated_providers"]), FILE_IO_PROVIDERS)
+        r = inspect(base + listing(FILE_IO_PROVIDERS, "T"), UNDEFINED,
+                    require_file_io=True)
+        self.assertEqual(r["status"], "PASS")
+        self.assertEqual(r["file_io_providers_defined"], 5)
+        self.assertFalse(r["strict_executable_link_passed"])
+        missing = sorted(FILE_IO_PROVIDERS)[0]
+        r = inspect(base + listing(FILE_IO_PROVIDERS, "T"), UNDEFINED + " U " + missing + "\n",
+                    require_file_io=True)
+        self.assertEqual(r["status"], "FAIL")
+        self.assertIn(missing, r["public_providers_still_undefined"])
 
     def test_missing_provider_fails(self):
         r=inspect(listing(set(PROVIDERS)-{"nx::boot()"},"T"),UNDEFINED)
