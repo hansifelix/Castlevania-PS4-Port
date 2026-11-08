@@ -26,6 +26,8 @@ PROVIDERS = frozenset({
     "nx::plat::reserve(unsigned long, unsigned long)",
     "nx::plat::commit(unsigned long, unsigned long)",
     "nx::plat::decommit(unsigned long, unsigned long)",
+})
+KERNEL_PROVIDERS = frozenset({
     "nx::kernel_init()",
     "nx::current_cpu()",
     "nx::create_main_thread(unsigned long)",
@@ -54,17 +56,19 @@ def parse(text: str, *, defined: bool) -> dict[str, int]:
     return out
 
 
-def inspect(defined: str, undefined: str) -> dict:
+def inspect(defined: str, undefined: str, *, require_kernel: bool = False) -> dict:
     defs = parse(defined, defined=True)
     undefs = parse(undefined, defined=False)
-    missing = sorted(x for x in PROVIDERS if defs.get(x) != 1)
-    unresolved = sorted(x for x in PROVIDERS if x in undefs)
+    needed = PROVIDERS | (KERNEL_PROVIDERS if require_kernel else frozenset())
+    missing = sorted(x for x in needed if defs.get(x) != 1)
+    unresolved = sorted(x for x in needed if x in undefs)
     unfilled = sorted(x for x in PROPRIETARY_MODULES if x not in undefs)
     invented = sorted(x for x in PROPRIETARY_MODULES if x in defs)
     video_missing = sorted(x for x in VIDEOOUT_IMPORTS if x not in undefs)
     return {
         "status": "PASS" if not (missing or unresolved or unfilled or invented or video_missing) else "FAIL",
-        "required_public_provider_count": len(PROVIDERS),
+        "required_public_provider_count": len(needed),
+        "kernel_providers_required": require_kernel,
         "missing_or_duplicated_providers": missing,
         "public_providers_still_undefined": unresolved,
         "proprietary_module_references_missing": unfilled,
@@ -85,9 +89,10 @@ def main() -> None:
     parser.add_argument("--defined", required=True, type=Path)
     parser.add_argument("--undefined", required=True, type=Path)
     parser.add_argument("--json", type=Path)
+    parser.add_argument("--require-kernel", action="store_true")
     a = parser.parse_args()
     result = inspect(a.defined.read_text(encoding="utf-8"),
-                     a.undefined.read_text(encoding="utf-8"))
+                     a.undefined.read_text(encoding="utf-8"), require_kernel=a.require_kernel)
     output = json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True)
     print(output)
     if a.json:
