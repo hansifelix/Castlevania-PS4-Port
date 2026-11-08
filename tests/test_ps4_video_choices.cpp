@@ -53,7 +53,7 @@ int main() {
 
     alignas(8) Bytes self{},usage{},klass{},fields{},res_setting{},win_setting{},
         res_modes{},res_choices{},win_modes{},win_choices{},r0{},r1{},r2{},w0{},w1{},w2{},w3{};
-    test_video_static_usage=ptr(usage);
+    nx::test_video_static_usage=ptr(usage);
     put<uint64_t>(ptr(usage),ptr(klass));
     put<uint64_t>(ptr(klass)+0xb8,ptr(fields));
     put<uint64_t>(ptr(fields),ptr(res_modes));
