@@ -129,3 +129,19 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(test_ps4_setting_active PRIVATE -UNDEBUG)
 endif()
 add_test(NAME test_ps4_setting_active COMMAND test_ps4_setting_active)
+
+
+# Castlevania's actual video-defaults callback with synthetic managed arrays
+# for host tests only; cross-compile against real nx/runtime.h in GitHub Actions.
+add_executable(test_ps4_video_defaults
+    tests/test_ps4_video_defaults.cpp
+    src/ps4/castlevania_video_defaults.cpp
+    src/ps4/castlevania_resolution.cpp)
+target_include_directories(test_ps4_video_defaults PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ps4"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ps4_video_defaults"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ps4_resolution")
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(test_ps4_video_defaults PRIVATE -UNDEBUG)
+endif()
+add_test(NAME test_ps4_video_defaults COMMAND test_ps4_video_defaults)
