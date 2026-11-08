@@ -4,7 +4,7 @@ import sys
 import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools.link.boot_runtime_link_gate import (
-    inspect, PROVIDERS, KERNEL_PROVIDERS, HORIZON_SERVICE_PROVIDERS, FILE_IO_PROVIDERS, THREAD_CLOCK_PROVIDERS, PROPRIETARY_MODULES, VIDEOOUT_IMPORTS
+    inspect, PROVIDERS, KERNEL_PROVIDERS, HORIZON_SERVICE_PROVIDERS, FILE_IO_PROVIDERS, THREAD_CLOCK_PROVIDERS, THREAD_LAUNCH_PROVIDERS, PROPRIETARY_MODULES, VIDEOOUT_IMPORTS
 )
 
 def listing(items, ty):
@@ -82,6 +82,21 @@ class BootLinkTest(unittest.TestCase):
                     require_clock_thread=True)
         self.assertEqual(r["status"], "FAIL")
         self.assertIn("nx::plat::sleep_ns(long)", r["public_providers_still_undefined"])
+
+    def test_native_thread_launch_requires_all_three_providers(self):
+        complete = listing(PROVIDERS | THREAD_LAUNCH_PROVIDERS, "T")
+        missing = inspect(COMPLETE, UNDEFINED, require_thread_launch=True)
+        self.assertEqual(missing["status"], "FAIL")
+        self.assertEqual(set(missing["missing_or_duplicated_providers"]), THREAD_LAUNCH_PROVIDERS)
+        good = inspect(complete, UNDEFINED, require_thread_launch=True)
+        self.assertEqual(good["status"], "PASS")
+        self.assertEqual(good["thread_launch_providers_defined"], 3)
+        self.assertFalse(good["strict_executable_link_passed"])
+        one = sorted(THREAD_LAUNCH_PROVIDERS)[0]
+        unresolved = inspect(complete, UNDEFINED + " U " + one + "\n",
+                             require_thread_launch=True)
+        self.assertEqual(unresolved["status"], "FAIL")
+        self.assertIn(one, unresolved["public_providers_still_undefined"])
 
     def test_missing_provider_fails(self):
         r=inspect(listing(set(PROVIDERS)-{"nx::boot()"},"T"),UNDEFINED)
