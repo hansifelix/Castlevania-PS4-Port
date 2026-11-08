@@ -145,3 +145,19 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(test_ps4_video_defaults PRIVATE -UNDEBUG)
 endif()
 add_test(NAME test_ps4_video_defaults COMMAND test_ps4_video_defaults)
+
+
+# Castlevania 1.1.0: actual managed native video label hook.
+# Host tests have synthetic managed strings, not game code.
+add_executable(test_ps4_video_text
+    tests/test_ps4_video_text.cpp
+    src/ps4/castlevania_video_text.cpp
+    src/ps4/castlevania_resolution.cpp)
+target_include_directories(test_ps4_video_text PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ps4"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ps4_video_text"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ps4_resolution")
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(test_ps4_video_text PRIVATE -UNDEBUG)
+endif()
+add_test(NAME test_ps4_video_text COMMAND test_ps4_video_text)
