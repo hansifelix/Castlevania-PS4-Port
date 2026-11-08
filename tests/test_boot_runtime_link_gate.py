@@ -4,7 +4,7 @@ import sys
 import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools.link.boot_runtime_link_gate import (
-    inspect, PROVIDERS, PROPRIETARY_MODULES, VIDEOOUT_IMPORTS
+    inspect, PROVIDERS, KERNEL_PROVIDERS, PROPRIETARY_MODULES, VIDEOOUT_IMPORTS
 )
 
 def listing(items, ty):
@@ -19,6 +19,18 @@ class BootLinkTest(unittest.TestCase):
         self.assertEqual(r["status"],"PASS")
         self.assertFalse(r["strict_executable_link_passed"])
         self.assertFalse(r["aot_tables_linked"])
+
+    def test_genuine_kernel_symbols_required_only_on_expanded_gate(self):
+        from tools.link.boot_runtime_link_gate import KERNEL_PROVIDERS
+        r = inspect(COMPLETE, UNDEFINED, require_kernel=True)
+        self.assertEqual(r["status"], "FAIL")
+        self.assertEqual(set(r["missing_or_duplicated_providers"]), KERNEL_PROVIDERS)
+        r = inspect(listing(PROVIDERS | KERNEL_PROVIDERS, "T"), UNDEFINED,
+                    require_kernel=True)
+        self.assertEqual(r["status"], "PASS")
+        self.assertEqual(r["required_public_provider_count"],
+                         len(PROVIDERS | KERNEL_PROVIDERS))
+        self.assertTrue(r["kernel_providers_required"])
 
     def test_missing_provider_fails(self):
         r=inspect(listing(set(PROVIDERS)-{"nx::boot()"},"T"),UNDEFINED)
