@@ -161,3 +161,19 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(test_ps4_video_text PRIVATE -UNDEBUG)
 endif()
 add_test(NAME test_ps4_video_text COMMAND test_ps4_video_text)
+
+
+# Real Castlevania managed-setting resolution change: original game method and
+# original game resolution setter are simulated ONLY in the host test.
+add_executable(test_ps4_resolution_changed
+    tests/test_ps4_resolution_changed.cpp
+    src/ps4/castlevania_resolution_changed.cpp
+    src/ps4/castlevania_resolution.cpp)
+target_include_directories(test_ps4_resolution_changed PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ps4"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ps4_resolution_changed"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ps4_resolution")
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(test_ps4_resolution_changed PRIVATE -UNDEBUG)
+endif()
+add_test(NAME test_ps4_resolution_changed COMMAND test_ps4_resolution_changed)
