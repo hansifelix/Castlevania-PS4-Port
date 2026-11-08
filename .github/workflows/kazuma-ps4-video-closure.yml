@@ -133,5 +133,6 @@ jobs:
             build/video-closure/defined.txt
             build/video-closure/undefined.txt
             build/video-closure/SHA256.txt
+            build/video-closure/closure-report.json
           if-no-files-found: error
           retention-days: 7
