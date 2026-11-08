@@ -74,3 +74,18 @@ target_link_libraries(time_thread_contract PUBLIC Threads::Threads)
 add_executable(test_time_thread_contract tests/test_time_thread_contract.cpp)
 target_link_libraries(test_time_thread_contract PRIVATE time_thread_contract)
 add_test(NAME test_time_thread_contract COMMAND test_time_thread_contract)
+
+
+# PS4 Castlevania resolution hooks: host-only synthetic CPU contract.
+# Real target build must use upstream nx/cpu.h and initialize VideoOut first.
+add_executable(test_ps4_castlevania_resolution
+    tests/test_ps4_resolution.cpp
+    src/ps4/castlevania_resolution.cpp)
+target_include_directories(test_ps4_castlevania_resolution PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ps4"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ps4_resolution")
+# Assert-based tests must remain active even in Release CI.
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(test_ps4_castlevania_resolution PRIVATE -UNDEBUG)
+endif()
+add_test(NAME test_ps4_castlevania_resolution COMMAND test_ps4_castlevania_resolution)
