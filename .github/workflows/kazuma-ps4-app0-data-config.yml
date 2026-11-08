@@ -110,7 +110,7 @@ jobs:
           set -euo pipefail
           sdk="$OO_PS4_TOOLCHAIN"
           src="$KAZUMA_NX_SOURCE"
-          mkdir -p build/thread-launch
+          mkdir -p build/app0-data
           sources=(
             src/ps4/castlevania_resolution.cpp
             src/ps4/castlevania_loading_material.cpp
