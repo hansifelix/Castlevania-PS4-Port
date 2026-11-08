@@ -44,8 +44,8 @@ class ClosureTests(unittest.TestCase):
         self.assertEqual(len(r["missing_or_duplicate_providers"]), 1)
 
     def test_full_ps4_videoout_stack_requires_real_os_imports(self):
-        defs = DEFINITIONS + "abc0 T nx::game::after_init()\\nabc8 T nx::plat::screen_size(unsigned int&, unsigned int&)\\n"
-        imports = "".join("   U "+name+"\\n" for name in
+        defs = DEFINITIONS + "abc0 T nx::game::after_init()\nabc8 T nx::plat::screen_size(unsigned int&, unsigned int&)\n"
+        imports = "".join("   U "+name+"\n" for name in
             ("sceVideoOutOpen", "sceVideoOutGetResolutionStatus", "sceVideoOutClose"))
         result = inspect(defs, imports, include_videoout=True)
         self.assertEqual(result["status"], "PASS")
@@ -57,7 +57,7 @@ class ClosureTests(unittest.TestCase):
         result = inspect(DEFINITIONS, imports, include_videoout=True)
         self.assertEqual(result["status"], "FAIL")
         self.assertEqual(len(result["missing_videoout_providers"]), 2)
-        result = inspect(defs, imports + "  U nx::plat::screen_size(unsigned int&, unsigned int&)\\n",
+        result = inspect(defs, imports + "  U nx::plat::screen_size(unsigned int&, unsigned int&)\n",
                          include_videoout=True)
         self.assertEqual(result["status"], "FAIL")
         self.assertEqual(len(result["unresolved_videoout_providers"]), 1)
