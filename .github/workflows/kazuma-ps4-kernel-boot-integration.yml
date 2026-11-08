@@ -1,0 +1,169 @@
+name: 'Kazuma PS4 - kernel/threads/IPC + boot runtime e video (publico)'
+on:
+  pull_request:
+    paths:
+      - 'src/ps4/castlevania_*.cpp'
+      - 'src/runtime_bridge/linked_modules_castlevania.cpp'
+      - 'tools/etapa50/platform_ps4_memory.cpp'
+      - 'tools/link/boot_runtime_link_gate.py'
+      - 'docs/KAZUMA_PS4_KERNEL_BOOT_INTEGRATION.md'
+      - 'tests/test_boot_runtime_link_gate.py'
+      - 'tools/link/video_callback_closure.py'
+      - 'tools/etapa74/platform_ps4_display.cpp'
+      - 'tests/test_video_callback_closure.py'
+      - '.github/workflows/kazuma-ps4-kernel-boot-integration.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/ps4/castlevania_*.cpp'
+      - 'src/runtime_bridge/linked_modules_castlevania.cpp'
+      - 'tools/etapa50/platform_ps4_memory.cpp'
+      - 'tools/link/boot_runtime_link_gate.py'
+      - 'docs/KAZUMA_PS4_KERNEL_BOOT_INTEGRATION.md'
+      - 'tests/test_boot_runtime_link_gate.py'
+      - 'tools/link/video_callback_closure.py'
+      - 'tools/etapa74/platform_ps4_display.cpp'
+      - 'tests/test_video_callback_closure.py'
+      - '.github/workflows/kazuma-ps4-kernel-boot-integration.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compilar-callback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preparar ferramentas
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang-18 llvm-18 lld-18 binutils git curl ca-certificates
+      - name: Obter OpenOrbis e runtime original MIT (hash fixados)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sdk"
+          curl --fail --location --retry 3 --retry-delay 3 \
+            'https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz' \
+            -o "$RUNNER_TEMP/openorbis.tar.gz"
+          echo '3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526  '"$RUNNER_TEMP/openorbis.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/openorbis.tar.gz" -C "$RUNNER_TEMP/sdk"
+          sdk_link="$(find "$RUNNER_TEMP/sdk" -name link.x -type f -print -quit)"
+          test -n "$sdk_link"
+          echo "OO_PS4_TOOLCHAIN=$(dirname "$sdk_link")" >> "$GITHUB_ENV"
+          git clone -q --filter=blob:none --sparse \
+            https://github.com/SwonDev/cstlvnia-blmont-to-macos.git "$RUNNER_TEMP/nx-src"
+          git -C "$RUNNER_TEMP/nx-src" checkout -q --detach \
+            4043f21bb4f656d34cd17ba070238c7728d00631
+          git -C "$RUNNER_TEMP/nx-src" sparse-checkout set runtime/src runtime/include/nx
+          test -s "$RUNNER_TEMP/nx-src/runtime/include/nx/runtime.h"
+          echo "KAZUMA_NX_SOURCE=$RUNNER_TEMP/nx-src" >> "$GITHUB_ENV"
+      - name: Adaptar somente no runner o C++20 do nx/cpu.h para libc++ OpenOrbis
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/compat/nx"
+          cat > "$RUNNER_TEMP/compat/nx/kazuma_cpu_compat.h" <<'CPP'
+          #pragma once
+          #include <cstdint>
+          #include <type_traits>
+          namespace kazuma_cpu_compat {
+          template <typename To, typename From>
+          constexpr To bit_cast(const From& from) noexcept {
+              static_assert(sizeof(To) == sizeof(From));
+              static_assert(std::is_trivially_copyable_v<To> && std::is_trivially_copyable_v<From>);
+              return __builtin_bit_cast(To, from);
+          }
+          template <typename T>
+          constexpr T rotr(T value, int shift) noexcept {
+              static_assert(std::is_unsigned_v<T>);
+              constexpr int bits = int(sizeof(T) * 8);
+              int n = ((shift % bits) + bits) % bits;
+              return n ? T((value >> n) | (value << (bits - n))) : value;
+          }
+          }
+          CPP
+          python3 - "$KAZUMA_NX_SOURCE/runtime/include/nx/cpu.h" "$RUNNER_TEMP/compat/nx/cpu.h" <<'PY_COMPAT'
+          from pathlib import Path
+          import sys
+          original = Path(sys.argv[1]).read_text(encoding='utf-8')
+          assert original.count('#include <bit>') == 1
+          assert original.count('std::bit_cast') >= 5
+          assert original.count('std::rotr(') == 2
+          patched = (original
+                     .replace('#include <bit>', '#include "kazuma_cpu_compat.h"')
+                     .replace('std::bit_cast', 'kazuma_cpu_compat::bit_cast')
+                     .replace('std::rotr(', 'kazuma_cpu_compat::rotr('))
+          Path(sys.argv[2]).write_text(patched, encoding='utf-8')
+          PY_COMPAT
+      - name: Compilar e ligar boot original, memoria, loader, registro, callbacks e VideoOut real
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$OO_PS4_TOOLCHAIN"
+          src="$KAZUMA_NX_SOURCE"
+          mkdir -p build/kernel-boot
+          sources=(
+            src/ps4/castlevania_resolution.cpp
+            src/ps4/castlevania_loading_material.cpp
+            src/ps4/castlevania_setting_active.cpp
+            src/ps4/castlevania_video_defaults.cpp
+            src/ps4/castlevania_video_text.cpp
+            src/ps4/castlevania_resolution_changed.cpp
+            src/ps4/castlevania_video_choices_ps4.cpp
+            src/ps4/castlevania_video_initialize_ps4.cpp
+            src/ps4/castlevania_game_ps4.cpp
+            tools/etapa74/platform_ps4_display.cpp
+            tools/etapa50/platform_ps4_memory.cpp
+            src/runtime_bridge/linked_modules_castlevania.cpp
+            "$src/runtime/src/main.cpp"
+            "$src/runtime/src/loader.cpp"
+            "$src/runtime/src/memory.cpp"
+            "$src/runtime/src/kernel.cpp"
+            "$src/runtime/src/kernel_thread_control.cpp"
+            "$src/runtime/src/kernel_watch.cpp"
+            "$src/runtime/src/ipc.cpp"
+          )
+          test "${#sources[@]}" -eq 19
+          objects=()
+          for source in "${sources[@]}"; do
+            name="$(basename "$source" .cpp)"
+            obj="build/kernel-boot/$name.o"
+            clang++-18 --target=x86_64-pc-freebsd12-elf -std=c++20 -O1 -fPIC \
+              -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
+              -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
+              -I"$RUNNER_TEMP/compat" -I"$src/runtime/include" -I"$src/runtime/src" \
+              -include cstdlib -I"src/ps4" -c "$source" -o "$obj"
+            test -s "$obj"
+            objects+=("$obj")
+          done
+          ld.lld-18 -m elf_x86_64 -r "${objects[@]}" -o build/kernel-boot/all-video.o
+          readelf -h build/kernel-boot/all-video.o | grep -q 'REL (Relocatable file)'
+          llvm-nm-18 -C --defined-only build/kernel-boot/all-video.o > build/kernel-boot/defined.txt
+          llvm-nm-18 -C --undefined-only build/kernel-boot/all-video.o > build/kernel-boot/undefined.txt
+          python3 tools/link/video_callback_closure.py \
+            --defined build/kernel-boot/defined.txt \
+            --undefined build/kernel-boot/undefined.txt \
+            --require-videoout \
+            --output build/kernel-boot/closure-report.json
+          python3 tests/test_video_callback_closure.py
+          python3 tools/link/boot_runtime_link_gate.py \
+            --defined build/kernel-boot/defined.txt \
+            --undefined build/kernel-boot/undefined.txt \
+            --require-kernel \
+            --json build/kernel-boot/kernel-boot-report.json
+          python3 tests/test_boot_runtime_link_gate.py
+          sha256sum "${objects[@]}" build/kernel-boot/all-video.o > build/kernel-boot/SHA256.txt
+          echo 'PASS: boot/loader/kernel/threads/ipc + memory/registry/video all publicly linked; private AOT remains absent'
+      - name: Publicar auditoria textual
+        uses: actions/upload-artifact@v4
+        with:
+          name: kazuma-kernel-boot-public-no-rom
+          path: |
+            build/kernel-boot/defined.txt
+            build/kernel-boot/undefined.txt
+            build/kernel-boot/SHA256.txt
+            build/kernel-boot/closure-report.json
+            build/kernel-boot/kernel-boot-report.json
+          if-no-files-found: error
+          retention-days: 7
