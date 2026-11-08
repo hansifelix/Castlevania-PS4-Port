@@ -150,6 +150,7 @@ jobs:
           python3 tools/link/boot_runtime_link_gate.py \
             --defined build/kernel-boot/defined.txt \
             --undefined build/kernel-boot/undefined.txt \
+            --require-kernel \
             --json build/kernel-boot/kernel-boot-report.json
           python3 tests/test_boot_runtime_link_gate.py
           sha256sum "${objects[@]}" build/kernel-boot/all-video.o > build/kernel-boot/SHA256.txt
