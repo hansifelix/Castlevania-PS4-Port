@@ -1,0 +1,115 @@
+name: 'Kazuma PS4 - NVN Vulkan core + loader PS4 real (sem PKG)'
+on:
+  pull_request:
+    paths:
+      - 'src/ps4/platform_ps4_vulkan_loader.cpp'
+      - 'tools/etapa62/ps4_vulkan_bridge.cpp'
+      - 'tools/link/ps4_nvn_vulkan_closure.py'
+      - 'tests/test_ps4_nvn_vulkan_closure.py'
+      - '.github/workflows/kazuma-ps4-nvn-vulkan-core.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  gpu-partial-real:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run small synthetic parser tests and install compiler
+        run: |
+          set -euo pipefail
+          python3 tests/test_ps4_nvn_vulkan_closure.py
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18 git curl ca-certificates
+      - name: Fetch pinned real runtime, OpenOrbis and Khronos Vulkan headers
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sdk"
+          curl -fL --retry 5 --retry-delay 5 \
+            'https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz' \
+            -o "$RUNNER_TEMP/openorbis.tar.gz"
+          echo '3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526  '"$RUNNER_TEMP/openorbis.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/openorbis.tar.gz" -C "$RUNNER_TEMP/sdk"
+          sdk_link="$(find "$RUNNER_TEMP/sdk" -name link.x -type f -print -quit)"
+          test -s "$sdk_link"
+          echo "KAZUMA_SDK=$(dirname "$sdk_link")" >> "$GITHUB_ENV"
+          git clone -q --filter=blob:none --sparse https://github.com/SwonDev/cstlvnia-blmont-to-macos.git "$RUNNER_TEMP/nx-src"
+          git -C "$RUNNER_TEMP/nx-src" checkout -q --detach 4043f21bb4f656d34cd17ba070238c7728d00631
+          git -C "$RUNNER_TEMP/nx-src" sparse-checkout set runtime/src runtime/include/nx
+          test -s "$RUNNER_TEMP/nx-src/runtime/src/nvn/nvn_vk.cpp"
+          echo "KAZUMA_NX_SOURCE=$RUNNER_TEMP/nx-src" >> "$GITHUB_ENV"
+          git clone -q --filter=blob:none --sparse https://github.com/KhronosGroup/Vulkan-Headers.git "$RUNNER_TEMP/vkh"
+          git -C "$RUNNER_TEMP/vkh" checkout -q --detach acbb9391c0a597272800cd3f4363661c00a27c77
+          git -C "$RUNNER_TEMP/vkh" sparse-checkout set include/vulkan include/vk_video
+          test -s "$RUNNER_TEMP/vkh/include/vulkan/vulkan.h"
+          echo "KAZUMA_VK_INCLUDE=$RUNNER_TEMP/vkh/include" >> "$GITHUB_ENV"
+      - name: Patch only runner C++20 cpu.h to match OpenOrbis libc++
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/compat/nx"
+          cat > "$RUNNER_TEMP/compat/nx/kazuma_cpu_compat.h" <<'CPP'
+          #pragma once
+          #include <cstdint>
+          #include <type_traits>
+          namespace kazuma_cpu_compat {
+          template <typename To, typename From>
+          constexpr To bit_cast(const From& from) noexcept {
+              static_assert(sizeof(To)==sizeof(From));
+              static_assert(std::is_trivially_copyable_v<To> && std::is_trivially_copyable_v<From>);
+              return __builtin_bit_cast(To, from);
+          }
+          template <typename T>
+          constexpr T rotr(T v, int shift) noexcept {
+              static_assert(std::is_unsigned_v<T>);
+              constexpr int nbits=int(sizeof(T)*8);
+              int n=((shift % nbits) + nbits) % nbits;
+              return n ? T((v >> n) | (v << (nbits - n))) : v;
+          }
+          }
+          CPP
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          original=(Path(os.environ["KAZUMA_NX_SOURCE"])/"runtime/include/nx/cpu.h").read_text()
+          assert original.count("#include <bit>")==1
+          assert original.count("std::bit_cast")>=5 and original.count("std::rotr(")==2
+          patched=(original.replace("#include <bit>", '#include "kazuma_cpu_compat.h"')
+                           .replace("std::bit_cast","kazuma_cpu_compat::bit_cast")
+                           .replace("std::rotr(","kazuma_cpu_compat::rotr("))
+          (Path(os.environ["RUNNER_TEMP"])/"compat/nx/cpu.h").write_text(patched)
+          PY
+      - name: Compile native upstream NVN GPU and PS4 Vulkan provider together
+        run: |
+          set -euo pipefail
+          src="$KAZUMA_NX_SOURCE/runtime"
+          sdk="$KAZUMA_SDK"
+          mkdir -p "$RUNNER_TEMP/nvn-gpu"
+          count=0
+          objects=()
+          for source in \
+              "$src/src/nvn/nvn_vk.cpp" \
+              "$src/src/nvn/nvn_shaders.cpp" \
+              "$src/src/nvn/nvn_gpu_pick.cpp" \
+              tools/etapa62/ps4_vulkan_bridge.cpp \
+              src/ps4/platform_ps4_vulkan_loader.cpp; do
+            obj="$RUNNER_TEMP/nvn-gpu/$count.o"
+            clang++-18 --target=x86_64-pc-freebsd12-elf -std=c++20 -O1 -fPIC \
+              -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -DKAZUMA_PS4_REAL_VULKAN=1 \
+              -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
+              -I"$RUNNER_TEMP/compat" -I"$src/include" -I"$src/src" -I"$src/src/nvn" \
+              -I"$KAZUMA_VK_INCLUDE" -include algorithm \
+              -c "$source" -o "$obj"
+            test -s "$obj"
+            objects+=("$obj")
+            count=$((count+1))
+          done
+          test "$count" -eq 5
+          ld.lld-18 -m elf_x86_64 -r -o "$RUNNER_TEMP/nvn-gpu/combined.o" "$RUNNER_TEMP/nvn-gpu/"{0..4}.o
+          llvm-nm-18 -C --defined-only "$RUNNER_TEMP/nvn-gpu/combined.o" > "$RUNNER_TEMP/nvn-gpu/defined.nm"
+          llvm-nm-18 -C --undefined-only "$RUNNER_TEMP/nvn-gpu/combined.o" > "$RUNNER_TEMP/nvn-gpu/undefined.nm"
+          python3 tools/link/ps4_nvn_vulkan_closure.py \
+            --defined "$RUNNER_TEMP/nvn-gpu/defined.nm" \
+            --undefined "$RUNNER_TEMP/nvn-gpu/undefined.nm"
+          echo 'KAZUMA_NVNVK_PARTIAL_PASS; no strict GPU link, no frames, no eboot, no pkg'
+      # Only log text; combined object remains ephemeral on Actions runner.
