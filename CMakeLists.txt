@@ -104,3 +104,15 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(test_ps4_castlevania_boot_gate PRIVATE -UNDEBUG)
 endif()
 add_test(NAME test_ps4_castlevania_boot_gate COMMAND test_ps4_castlevania_boot_gate)
+
+
+# Real loading-animation callback; host-only CPU and guest calls are synthetic.
+add_executable(test_ps4_loading_material
+    tests/test_ps4_loading_material.cpp
+    src/ps4/castlevania_loading_material.cpp)
+target_include_directories(test_ps4_loading_material PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ps4_resolution")
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(test_ps4_loading_material PRIVATE -UNDEBUG)
+endif()
+add_test(NAME test_ps4_loading_material COMMAND test_ps4_loading_material)
