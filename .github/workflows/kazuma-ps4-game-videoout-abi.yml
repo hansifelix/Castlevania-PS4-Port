@@ -40,7 +40,7 @@ jobs:
             https://github.com/SwonDev/cstlvnia-blmont-to-macos.git "$RUNNER_TEMP/nx-src"
           git -C "$RUNNER_TEMP/nx-src" checkout -q --detach \
             4043f21bb4f656d34cd17ba070238c7728d00631
-          git -C "$RUNNER_TEMP/nx-src" sparse-checkout set runtime/src/platform.h runtime/include/nx/game.h
+          git -C "$RUNNER_TEMP/nx-src" sparse-checkout set runtime/src runtime/include/nx
           test -s "$RUNNER_TEMP/nx-src/runtime/include/nx/game.h"
           echo "KAZUMA_NX_SOURCE=$RUNNER_TEMP/nx-src" >> "$GITHUB_ENV"
       - name: Compilar provider PS4 contra headers REAIS
