@@ -193,3 +193,21 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(test_ps4_video_choices PRIVATE -UNDEBUG)
 endif()
 add_test(NAME test_ps4_video_choices COMMAND test_ps4_video_choices)
+
+
+# Original game video-initialize and managed fullscreen-setting providers.
+# Real PS4 video choices and render extent are linked; only guest managed
+# objects and the guest method dispatcher are simulated in the host test.
+add_executable(test_ps4_video_initialize
+    tests/test_ps4_video_initialize.cpp
+    src/ps4/castlevania_video_initialize_ps4.cpp
+    src/ps4/castlevania_video_choices_ps4.cpp
+    src/ps4/castlevania_resolution.cpp)
+target_include_directories(test_ps4_video_initialize PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ps4"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ps4_video_choices"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ps4_resolution")
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(test_ps4_video_initialize PRIVATE -UNDEBUG)
+endif()
+add_test(NAME test_ps4_video_initialize COMMAND test_ps4_video_initialize)
