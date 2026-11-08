@@ -11,7 +11,7 @@ from pathlib import Path
 import re
 import sys
 
-LINE = re.compile(r"^\\s*(?:[0-9a-fA-F]+\\s+)?([A-Za-z])\\s+(.+?)\\s*$")
+LINE = re.compile(r"^\s*(?:[0-9a-fA-F]+\s+)?([A-Za-z])\s+(.+?)\s*$")
 REQUIRED = frozenset({
     "nx::plat::ps4::vk_get_instance_proc_addr()",
     "nx::plat::vulkan_get_instance_proc_addr()",
