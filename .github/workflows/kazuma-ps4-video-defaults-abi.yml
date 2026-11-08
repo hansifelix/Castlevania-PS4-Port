@@ -1,0 +1,114 @@
+name: 'Kazuma PS4 - callback defaults de vídeo real (ABI real, sem jogo)'
+on:
+  pull_request:
+    paths:
+      - 'src/ps4/castlevania_video_defaults.cpp'
+      - '.github/workflows/kazuma-ps4-video-defaults-abi.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/ps4/castlevania_video_defaults.cpp'
+      - '.github/workflows/kazuma-ps4-video-defaults-abi.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  compilar-callback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Preparar ferramentas
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang-18 llvm-18 lld-18 binutils git curl ca-certificates
+      - name: Obter OpenOrbis e runtime original MIT (hash fixados)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sdk"
+          curl --fail --location --retry 3 --retry-delay 3 \
+            'https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz' \
+            -o "$RUNNER_TEMP/openorbis.tar.gz"
+          echo '3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526  '"$RUNNER_TEMP/openorbis.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/openorbis.tar.gz" -C "$RUNNER_TEMP/sdk"
+          sdk_link="$(find "$RUNNER_TEMP/sdk" -name link.x -type f -print -quit)"
+          test -n "$sdk_link"
+          echo "OO_PS4_TOOLCHAIN=$(dirname "$sdk_link")" >> "$GITHUB_ENV"
+          git clone -q --filter=blob:none --sparse \
+            https://github.com/SwonDev/cstlvnia-blmont-to-macos.git "$RUNNER_TEMP/nx-src"
+          git -C "$RUNNER_TEMP/nx-src" checkout -q --detach \
+            4043f21bb4f656d34cd17ba070238c7728d00631
+          git -C "$RUNNER_TEMP/nx-src" sparse-checkout set runtime/src runtime/include/nx
+          test -s "$RUNNER_TEMP/nx-src/runtime/include/nx/runtime.h"
+          echo "KAZUMA_NX_SOURCE=$RUNNER_TEMP/nx-src" >> "$GITHUB_ENV"
+      - name: Adaptar somente no runner o C++20 do nx/cpu.h para libc++ OpenOrbis
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/compat/nx"
+          cat > "$RUNNER_TEMP/compat/nx/kazuma_cpu_compat.h" <<'CPP'
+          #pragma once
+          #include <cstdint>
+          #include <type_traits>
+          namespace kazuma_cpu_compat {
+          template <typename To, typename From>
+          constexpr To bit_cast(const From& from) noexcept {
+              static_assert(sizeof(To) == sizeof(From));
+              static_assert(std::is_trivially_copyable_v<To> && std::is_trivially_copyable_v<From>);
+              return __builtin_bit_cast(To, from);
+          }
+          template <typename T>
+          constexpr T rotr(T value, int shift) noexcept {
+              static_assert(std::is_unsigned_v<T>);
+              constexpr int bits = int(sizeof(T) * 8);
+              int n = ((shift % bits) + bits) % bits;
+              return n ? T((value >> n) | (value << (bits - n))) : value;
+          }
+          }
+          CPP
+          python3 - "$KAZUMA_NX_SOURCE/runtime/include/nx/cpu.h" "$RUNNER_TEMP/compat/nx/cpu.h" <<'PY_COMPAT'
+          from pathlib import Path
+          import sys
+          original = Path(sys.argv[1]).read_text(encoding='utf-8')
+          assert original.count('#include <bit>') == 1
+          assert original.count('std::bit_cast') >= 5
+          assert original.count('std::rotr(') == 2
+          patched = (original
+                     .replace('#include <bit>', '#include "kazuma_cpu_compat.h"')
+                     .replace('std::bit_cast', 'kazuma_cpu_compat::bit_cast')
+                     .replace('std::rotr(', 'kazuma_cpu_compat::rotr('))
+          Path(sys.argv[2]).write_text(patched, encoding='utf-8')
+          PY_COMPAT
+      - name: Compilar callback com ABI real e auditar simbolos
+        shell: bash
+        run: |
+          set -euo pipefail
+          sdk="$OO_PS4_TOOLCHAIN"
+          src="$KAZUMA_NX_SOURCE"
+          mkdir -p build/video-defaults
+          clang++-18 --target=x86_64-pc-freebsd12-elf -std=c++20 -O1 -fPIC \
+            -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
+            -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
+            -I"$RUNNER_TEMP/compat" -I"$src/runtime/include" -I"$src/runtime/src" \
+            -c src/ps4/castlevania_video_defaults.cpp \
+            -o build/video-defaults/callback.o
+          test -s build/video-defaults/callback.o
+          readelf -h build/video-defaults/callback.o | grep -q 'REL (Relocatable file)'
+          llvm-nm-18 -C --defined-only build/video-defaults/callback.o > build/video-defaults/defined.txt
+          llvm-nm-18 -C --undefined-only build/video-defaults/callback.o > build/video-defaults/undefined.txt
+          grep -Fq 'nx_castlevania_video_defaults(nx::CPU&, void (*)(nx::CPU&))' build/video-defaults/defined.txt
+          grep -Fq 'nx::fatal(char const*, ...)' build/video-defaults/undefined.txt
+          grep -Fq 'kazuma::ps4::video::native_size(unsigned int&, unsigned int&)' build/video-defaults/undefined.txt
+          sha256sum build/video-defaults/callback.o > build/video-defaults/SHA256.txt
+          echo 'PASS: real video-defaults callback compiled against pinned nx/runtime.h (no game)'
+      - name: Publicar auditoria textual
+        uses: actions/upload-artifact@v4
+        with:
+          name: kazuma-video-defaults-abi-sem-jogo
+          path: |
+            build/video-defaults/defined.txt
+            build/video-defaults/undefined.txt
+            build/video-defaults/SHA256.txt
+          if-no-files-found: error
+          retention-days: 7
