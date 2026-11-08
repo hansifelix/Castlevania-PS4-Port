@@ -15,6 +15,7 @@ from pathlib import Path
 import subprocess
 import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from tools.etapa42.diagnosticar_link import unique_errors
 
 MAX_EXAMPLES = 8
