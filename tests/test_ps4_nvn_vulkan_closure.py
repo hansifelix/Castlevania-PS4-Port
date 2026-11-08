@@ -6,7 +6,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from tools.link.ps4_nvn_vulkan_closure import inspect, REQUIRED
 
 def nm(names, kind):
-    return "".join(f"{i+1:016x} {kind} {n}\\n" for i,n in enumerate(sorted(names)))
+    return "".join(f"{i+1:016x} {kind} {n}\n" for i,n in enumerate(sorted(names)))
 
 ALL = set(REQUIRED) | {
     "nx::plat::vulkan_create_surface(void*, void*, unsigned long*, void*)",
@@ -15,7 +15,7 @@ ALL = set(REQUIRED) | {
 }
 # Signature of gpu_submit need not match this synthetic fixture precisely;
 # the partial-link gate uses an unambiguous function prefix.
-IMPORT = " U vkGetInstanceProcAddr\\n"
+IMPORT = " U vkGetInstanceProcAddr\n"
 
 class VulkanBridgeTest(unittest.TestCase):
     def test_real_core_and_import_partially_close(self):
@@ -37,7 +37,7 @@ class VulkanBridgeTest(unittest.TestCase):
         x=inspect(nm(ALL-{"nx::plat::vulkan_get_instance_proc_addr()"},"T"),IMPORT)
         self.assertEqual(x["status"],"FAIL")
     def test_duplicate_providers_fail(self):
-        txt=nm(ALL,"T") + "0000 T nx::plat::ps4::vk_get_instance_proc_addr()\\n"
+        txt=nm(ALL,"T") + "0000 T nx::plat::ps4::vk_get_instance_proc_addr()\n"
         x=inspect(txt,IMPORT)
         self.assertEqual(x["status"],"FAIL")
 
