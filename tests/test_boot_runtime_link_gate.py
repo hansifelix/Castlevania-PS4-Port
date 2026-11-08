@@ -4,7 +4,7 @@ import sys
 import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools.link.boot_runtime_link_gate import (
-    inspect, PROVIDERS, KERNEL_PROVIDERS, HORIZON_SERVICE_PROVIDERS, FILE_IO_PROVIDERS, THREAD_CLOCK_PROVIDERS, THREAD_LAUNCH_PROVIDERS, APP0_PROVIDERS, PROPRIETARY_MODULES, VIDEOOUT_IMPORTS
+    inspect, PROVIDERS, KERNEL_PROVIDERS, HORIZON_SERVICE_PROVIDERS, FILE_IO_PROVIDERS, THREAD_CLOCK_PROVIDERS, THREAD_LAUNCH_PROVIDERS, APP0_PROVIDERS, SAVEDATA_PROVIDERS, SAVEDATA_IMPORTS, PROPRIETARY_MODULES, VIDEOOUT_IMPORTS
 )
 
 def listing(items, ty):
@@ -112,6 +112,20 @@ class BootLinkTest(unittest.TestCase):
                             require_app0=True)
         self.assertEqual(undefined["status"], "FAIL")
         self.assertIn(one, undefined["public_providers_still_undefined"])
+
+    def test_sony_savedata_mount_is_a_real_provider(self):
+        base=listing(PROVIDERS | SAVEDATA_PROVIDERS,"T")
+        imports=UNDEFINED + listing(SAVEDATA_IMPORTS,"U")
+        result=inspect(COMPLETE,imports,require_savedata=True)
+        self.assertEqual(result["status"],"FAIL")
+        self.assertIn("nx::plat::writable_root()",result["missing_or_duplicated_providers"])
+        result=inspect(base,imports,require_savedata=True)
+        self.assertEqual(result["status"],"PASS")
+        self.assertEqual(result["missing_real_savedata_imports"],[])
+        self.assertFalse(result["strict_executable_link_passed"])
+        result=inspect(base,UNDEFINED,require_savedata=True)
+        self.assertEqual(result["status"],"FAIL")
+        self.assertEqual(set(result["missing_real_savedata_imports"]),SAVEDATA_IMPORTS)
 
     def test_missing_provider_fails(self):
         r=inspect(listing(set(PROVIDERS)-{"nx::boot()"},"T"),UNDEFINED)
