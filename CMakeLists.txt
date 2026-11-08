@@ -116,3 +116,16 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(test_ps4_loading_material PRIVATE -UNDEBUG)
 endif()
 add_test(NAME test_ps4_loading_material COMMAND test_ps4_loading_material)
+
+
+# Actual IsSettingActive AOT callback (video keys only). Synthetic guest strings
+# are used solely in host CTest; production uses upstream nx/runtime.h.
+add_executable(test_ps4_setting_active
+    tests/test_ps4_setting_active.cpp
+    src/ps4/castlevania_setting_active.cpp)
+target_include_directories(test_ps4_setting_active PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ps4_resolution")
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(test_ps4_setting_active PRIVATE -UNDEBUG)
+endif()
+add_test(NAME test_ps4_setting_active COMMAND test_ps4_setting_active)
