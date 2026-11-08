@@ -4,6 +4,7 @@
 // The PS4 VideoOut is fullscreen-only. No imaginary window manager.
 #include <nx/runtime.h>
 #include "castlevania_resolution.hpp"
+#include "castlevania_video_choices.hpp"
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -95,19 +96,23 @@ void resolution_choices(nx::CPU& caller, uint64_t setting, uint64_t fields) {
 }
 } // namespace
 
+void kazuma::ps4::video::refresh_video_choices(nx::CPU& cpu, uint64_t self) {
+    if (!self) return;
+    const uint64_t fields = static_fields();
+    if (!fields) return;
+    if (!ready())
+        nx::fatal("Castlevania PS4: video choices require initialized VideoOut");
+    resolution_choices(cpu, nx::ld<uint64_t>(self + 0x68), fields);
+    window_choices(nx::ld<uint64_t>(self + 0x58), fields);
+}
+
 void nx_castlevania_supported_resolutions(nx::CPU& cpu,
                                           void (*original)(nx::CPU&)) {
     if (!original)
         nx::fatal("Castlevania PS4: supported resolutions original absent");
     const uint64_t self = cpu.x[0];
     original(cpu); // Populate game's managed arrays before reading or altering them.
-    if (!self) return;
-    const uint64_t fields = static_fields();
-    if (!fields) return;
-    if (!kazuma::ps4::video::ready())
-        nx::fatal("Castlevania PS4: video choices require initialized VideoOut");
-    resolution_choices(cpu, nx::ld<uint64_t>(self + 0x68), fields);
-    window_choices(nx::ld<uint64_t>(self + 0x58), fields);
+    kazuma::ps4::video::refresh_video_choices(cpu, self);
 }
 
 void nx_castlevania_fullscreen_mode(nx::CPU& cpu, void (*)(nx::CPU&)) {
