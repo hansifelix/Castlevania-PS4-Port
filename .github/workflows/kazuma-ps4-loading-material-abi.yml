@@ -42,6 +42,44 @@ jobs:
           git -C "$RUNNER_TEMP/nx-src" sparse-checkout set runtime/src runtime/include/nx
           test -s "$RUNNER_TEMP/nx-src/runtime/include/nx/runtime.h"
           echo "KAZUMA_NX_SOURCE=$RUNNER_TEMP/nx-src" >> "$GITHUB_ENV"
+      - name: Adaptar somente no runner o C++20 do nx/cpu.h para libc++ OpenOrbis
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/compat/nx"
+          cat > "$RUNNER_TEMP/compat/nx/kazuma_cpu_compat.h" <<'CPP'
+          #pragma once
+          #include <cstdint>
+          #include <type_traits>
+          namespace kazuma_cpu_compat {
+          template <typename To, typename From>
+          constexpr To bit_cast(const From& from) noexcept {
+              static_assert(sizeof(To) == sizeof(From));
+              static_assert(std::is_trivially_copyable_v<To> && std::is_trivially_copyable_v<From>);
+              return __builtin_bit_cast(To, from);
+          }
+          template <typename T>
+          constexpr T rotr(T value, int shift) noexcept {
+              static_assert(std::is_unsigned_v<T>);
+              constexpr int bits = int(sizeof(T) * 8);
+              int n = ((shift % bits) + bits) % bits;
+              return n ? T((value >> n) | (value << (bits - n))) : value;
+          }
+          }
+          CPP
+          python3 - "$KAZUMA_NX_SOURCE/runtime/include/nx/cpu.h" "$RUNNER_TEMP/compat/nx/cpu.h" <<'PY_COMPAT'
+          from pathlib import Path
+          import sys
+          original = Path(sys.argv[1]).read_text(encoding='utf-8')
+          assert original.count('#include <bit>') == 1
+          assert original.count('std::bit_cast') >= 5
+          assert original.count('std::rotr(') == 2
+          patched = (original
+                     .replace('#include <bit>', '#include "kazuma_cpu_compat.h"')
+                     .replace('std::bit_cast', 'kazuma_cpu_compat::bit_cast')
+                     .replace('std::rotr(', 'kazuma_cpu_compat::rotr('))
+          Path(sys.argv[2]).write_text(patched, encoding='utf-8')
+          PY_COMPAT
       - name: Compilar callback com ABI real e auditar simbolos
         shell: bash
         run: |
@@ -52,7 +90,7 @@ jobs:
           clang++-18 --target=x86_64-pc-freebsd12-elf -std=c++20 -O1 -fPIC \
             -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE \
             -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
-            -I"$src/runtime/include" -I"$src/runtime/src" \
+            -I"$RUNNER_TEMP/compat" -I"$src/runtime/include" -I"$src/runtime/src" \
             -c src/ps4/castlevania_loading_material.cpp \
             -o build/loading-material/callback.o
           test -s build/loading-material/callback.o
