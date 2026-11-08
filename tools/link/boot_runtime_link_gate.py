@@ -62,6 +62,11 @@ THREAD_LAUNCH_PROVIDERS = frozenset({
     "nx::plat::exit_thread()",
     "nx::plat::exit_process(int)",
 })
+APP0_PROVIDERS = frozenset({
+    "nx::plat::data_root()",
+    "nx::plat::setting(std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&)",
+    "nx::plat::log_line(char const*)",
+})
 PROPRIETARY_MODULES = frozenset({"nx_module_main", "nx_module_sdk", "nx_module_subsdk0"})
 VIDEOOUT_IMPORTS = frozenset({
     "sceVideoOutOpen", "sceVideoOutGetResolutionStatus", "sceVideoOutClose"
@@ -83,14 +88,15 @@ def parse(text: str, *, defined: bool) -> dict[str, int]:
     return out
 
 
-def inspect(defined: str, undefined: str, *, require_kernel: bool = False, require_services: bool = False, require_file_io: bool = False, require_clock_thread: bool = False, require_thread_launch: bool = False) -> dict:
+def inspect(defined: str, undefined: str, *, require_kernel: bool = False, require_services: bool = False, require_file_io: bool = False, require_clock_thread: bool = False, require_thread_launch: bool = False, require_app0: bool = False) -> dict:
     defs = parse(defined, defined=True)
     undefs = parse(undefined, defined=False)
     needed = (PROVIDERS | (KERNEL_PROVIDERS if require_kernel else frozenset()) |
               (HORIZON_SERVICE_PROVIDERS if require_services else frozenset()) |
               (FILE_IO_PROVIDERS if require_file_io else frozenset()) |
               (THREAD_CLOCK_PROVIDERS if require_clock_thread else frozenset()) |
-              (THREAD_LAUNCH_PROVIDERS if require_thread_launch else frozenset()))
+              (THREAD_LAUNCH_PROVIDERS if require_thread_launch else frozenset()) |
+              (APP0_PROVIDERS if require_app0 else frozenset()))
     missing = sorted(x for x in needed if defs.get(x) != 1)
     unresolved = sorted(x for x in needed if x in undefs)
     unfilled = sorted(x for x in PROPRIETARY_MODULES if x not in undefs)
@@ -104,6 +110,8 @@ def inspect(defined: str, undefined: str, *, require_kernel: bool = False, requi
         "file_io_providers_required": require_file_io,
         "clock_thread_providers_required": require_clock_thread,
         "thread_launch_providers_required": require_thread_launch,
+        "app0_providers_required": require_app0,
+        "app0_providers_defined": sum(defs.get(x, 0) == 1 and x not in undefs for x in APP0_PROVIDERS),
         "thread_launch_providers_defined": sum(defs.get(x, 0) == 1 and x not in undefs for x in THREAD_LAUNCH_PROVIDERS),
         "clock_thread_providers_defined": sum(defs.get(x, 0) == 1 and x not in undefs for x in THREAD_CLOCK_PROVIDERS),
         "file_io_providers_defined": sum(defs.get(x, 0) == 1 and x not in undefs for x in FILE_IO_PROVIDERS),
@@ -133,6 +141,7 @@ def main() -> None:
     parser.add_argument("--require-file-io", action="store_true")
     parser.add_argument("--require-clock-thread", action="store_true")
     parser.add_argument("--require-thread-launch", action="store_true")
+    parser.add_argument("--require-app0", action="store_true")
     a = parser.parse_args()
     result = inspect(a.defined.read_text(encoding="utf-8"),
                      a.undefined.read_text(encoding="utf-8"),
@@ -140,7 +149,8 @@ def main() -> None:
                      require_services=a.require_horizon_services,
                      require_file_io=a.require_file_io,
                      require_clock_thread=a.require_clock_thread,
-                     require_thread_launch=a.require_thread_launch)
+                     require_thread_launch=a.require_thread_launch,
+                     require_app0=a.require_app0)
     output = json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True)
     print(output)
     if a.json:
