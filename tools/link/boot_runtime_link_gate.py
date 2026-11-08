@@ -35,6 +35,15 @@ KERNEL_PROVIDERS = frozenset({
     "nx::backtrace(nx::CPU&)",
     "nx::handle_get(unsigned int)",
 })
+HORIZON_SERVICE_PROVIDERS = frozenset({
+    "nx::init_tls_block(unsigned long)",
+    "nx::set_tls_template(unsigned long, unsigned long)",
+    "nx::log_recent_files()",
+    "nx::map_transfer_memory(unsigned int, unsigned long, unsigned long)",
+    "nx::unmap_transfer_memory(unsigned int, unsigned long, unsigned long)",
+    "nx::set_thread_core_mask(unsigned int, int, unsigned long)",
+    "nx::get_info(unsigned int, unsigned int, unsigned long, unsigned int&)",
+})
 PROPRIETARY_MODULES = frozenset({"nx_module_main", "nx_module_sdk", "nx_module_subsdk0"})
 VIDEOOUT_IMPORTS = frozenset({
     "sceVideoOutOpen", "sceVideoOutGetResolutionStatus", "sceVideoOutClose"
@@ -56,10 +65,10 @@ def parse(text: str, *, defined: bool) -> dict[str, int]:
     return out
 
 
-def inspect(defined: str, undefined: str, *, require_kernel: bool = False) -> dict:
+def inspect(defined: str, undefined: str, *, require_kernel: bool = False, require_services: bool = False) -> dict:
     defs = parse(defined, defined=True)
     undefs = parse(undefined, defined=False)
-    needed = PROVIDERS | (KERNEL_PROVIDERS if require_kernel else frozenset())
+    needed = PROVIDERS | (KERNEL_PROVIDERS if require_kernel else frozenset()) | (HORIZON_SERVICE_PROVIDERS if require_services else frozenset())
     missing = sorted(x for x in needed if defs.get(x) != 1)
     unresolved = sorted(x for x in needed if x in undefs)
     unfilled = sorted(x for x in PROPRIETARY_MODULES if x not in undefs)
@@ -69,6 +78,8 @@ def inspect(defined: str, undefined: str, *, require_kernel: bool = False) -> di
         "status": "PASS" if not (missing or unresolved or unfilled or invented or video_missing) else "FAIL",
         "required_public_provider_count": len(needed),
         "kernel_providers_required": require_kernel,
+        "horizon_services_required": require_services,
+        "horizon_services_defined": sum(defs.get(x, 0) == 1 and x not in undefs for x in HORIZON_SERVICE_PROVIDERS),
         "missing_or_duplicated_providers": missing,
         "public_providers_still_undefined": unresolved,
         "proprietary_module_references_missing": unfilled,
@@ -90,9 +101,12 @@ def main() -> None:
     parser.add_argument("--undefined", required=True, type=Path)
     parser.add_argument("--json", type=Path)
     parser.add_argument("--require-kernel", action="store_true")
+    parser.add_argument("--require-horizon-services", action="store_true")
     a = parser.parse_args()
     result = inspect(a.defined.read_text(encoding="utf-8"),
-                     a.undefined.read_text(encoding="utf-8"), require_kernel=a.require_kernel)
+                     a.undefined.read_text(encoding="utf-8"),
+                     require_kernel=a.require_kernel,
+                     require_services=a.require_horizon_services)
     output = json.dumps(result, ensure_ascii=False, indent=2, sort_keys=True)
     print(output)
     if a.json:

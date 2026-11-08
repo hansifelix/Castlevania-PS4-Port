@@ -4,7 +4,7 @@ import sys
 import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools.link.boot_runtime_link_gate import (
-    inspect, PROVIDERS, KERNEL_PROVIDERS, PROPRIETARY_MODULES, VIDEOOUT_IMPORTS
+    inspect, PROVIDERS, KERNEL_PROVIDERS, HORIZON_SERVICE_PROVIDERS, PROPRIETARY_MODULES, VIDEOOUT_IMPORTS
 )
 
 def listing(items, ty):
@@ -31,6 +31,26 @@ class BootLinkTest(unittest.TestCase):
         self.assertEqual(r["required_public_provider_count"],
                          len(PROVIDERS | KERNEL_PROVIDERS))
         self.assertTrue(r["kernel_providers_required"])
+
+    def test_horizon_services_must_be_real_when_requested(self):
+        baseline = listing(PROVIDERS | KERNEL_PROVIDERS, "T")
+        unresolved = UNDEFINED + listing(HORIZON_SERVICE_PROVIDERS, "U")
+        result = inspect(baseline, unresolved, require_kernel=True, require_services=True)
+        self.assertEqual(result["status"], "FAIL")
+        self.assertEqual(set(result["missing_or_duplicated_providers"]), HORIZON_SERVICE_PROVIDERS)
+        complete = listing(PROVIDERS | KERNEL_PROVIDERS | HORIZON_SERVICE_PROVIDERS, "T")
+        result = inspect(complete, UNDEFINED, require_kernel=True, require_services=True)
+        self.assertEqual(result["status"], "PASS")
+        self.assertEqual(result["horizon_services_defined"], 7)
+        self.assertTrue(result["horizon_services_required"])
+        self.assertFalse(result["strict_executable_link_passed"])
+
+    def test_false_service_definition_cannot_hide_unresolved_reference(self):
+        complete = listing(PROVIDERS | KERNEL_PROVIDERS | HORIZON_SERVICE_PROVIDERS, "T")
+        one = sorted(HORIZON_SERVICE_PROVIDERS)[0]
+        result = inspect(complete, UNDEFINED + " U " + one + "\n", require_kernel=True, require_services=True)
+        self.assertEqual(result["status"], "FAIL")
+        self.assertIn(one, result["public_providers_still_undefined"])
 
     def test_missing_provider_fails(self):
         r=inspect(listing(set(PROVIDERS)-{"nx::boot()"},"T"),UNDEFINED)
