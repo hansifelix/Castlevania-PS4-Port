@@ -89,3 +89,18 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(test_ps4_castlevania_resolution PRIVATE -UNDEBUG)
 endif()
 add_test(NAME test_ps4_castlevania_resolution COMMAND test_ps4_castlevania_resolution)
+
+
+# PS4 boot gate: the real game provider queries the platform's VideoOut
+# before entering nnMain; synthetic host fixtures stand in for Orbis.
+add_executable(test_ps4_castlevania_boot_gate
+    tests/test_ps4_game_boot_gate.cpp
+    src/ps4/castlevania_game_ps4.cpp
+    src/ps4/castlevania_resolution.cpp)
+target_include_directories(test_ps4_castlevania_boot_gate PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/ps4"
+    "${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/ps4_resolution")
+if(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+    target_compile_options(test_ps4_castlevania_boot_gate PRIVATE -UNDEBUG)
+endif()
+add_test(NAME test_ps4_castlevania_boot_gate COMMAND test_ps4_castlevania_boot_gate)
