@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <chrono>
 #include <thread>
+#include <pthread.h>
 
 struct Job {
     std::atomic<int> done{0};
