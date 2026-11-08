@@ -143,6 +143,7 @@ int main() {
 
     // Wrong mode list must fail rather than invent a fullscreen setting.
     put<uint32_t>(at(win_modes)+36,0);
+    put<uint32_t>(at(win_setting)+0x18,0); // Exercise the default-match path.
     denied=false;
     try {nx_castlevania_video_initialize(c,initialize_original);}
     catch(const std::runtime_error& e) {
