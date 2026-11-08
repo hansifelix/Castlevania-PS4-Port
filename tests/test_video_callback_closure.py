@@ -43,6 +43,25 @@ class ClosureTests(unittest.TestCase):
         self.assertEqual(r["status"], "FAIL")
         self.assertEqual(len(r["missing_or_duplicate_providers"]), 1)
 
+    def test_full_ps4_videoout_stack_requires_real_os_imports(self):
+        defs = DEFINITIONS + "abc0 T nx::game::after_init()\\nabc8 T nx::plat::screen_size(unsigned int&, unsigned int&)\\n"
+        imports = "".join("   U "+name+"\\n" for name in
+            ("sceVideoOutOpen", "sceVideoOutGetResolutionStatus", "sceVideoOutClose"))
+        result = inspect(defs, imports, include_videoout=True)
+        self.assertEqual(result["status"], "PASS")
+        self.assertTrue(result["videoout_stack_verified"])
+        self.assertFalse(result["final_executable_link"])
+        result = inspect(defs, "", include_videoout=True)
+        self.assertEqual(result["status"], "FAIL")
+        self.assertEqual(len(result["missing_real_sce_videoout_imports"]), 3)
+        result = inspect(DEFINITIONS, imports, include_videoout=True)
+        self.assertEqual(result["status"], "FAIL")
+        self.assertEqual(len(result["missing_videoout_providers"]), 2)
+        result = inspect(defs, imports + "  U nx::plat::screen_size(unsigned int&, unsigned int&)\\n",
+                         include_videoout=True)
+        self.assertEqual(result["status"], "FAIL")
+        self.assertEqual(len(result["unresolved_videoout_providers"]), 1)
+
     def test_unexpected_stub_name_is_failure(self):
         r = inspect(DEFINITIONS + "abcd T nx_castlevania_fake_stub(nx::CPU&)\n", "")
         self.assertEqual(r["status"], "FAIL")
