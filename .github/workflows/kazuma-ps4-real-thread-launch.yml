@@ -163,6 +163,7 @@ jobs:
             --require-kernel \
             --require-horizon-services \
             --require-file-io \
+            --require-clock-thread \
             --require-thread-launch \
             --json build/thread-launch/thread-launch-report.json
           python3 tests/test_boot_runtime_link_gate.py
