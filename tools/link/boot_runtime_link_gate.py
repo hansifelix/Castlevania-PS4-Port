@@ -26,6 +26,12 @@ PROVIDERS = frozenset({
     "nx::plat::reserve(unsigned long, unsigned long)",
     "nx::plat::commit(unsigned long, unsigned long)",
     "nx::plat::decommit(unsigned long, unsigned long)",
+    "nx::kernel_init()",
+    "nx::current_cpu()",
+    "nx::create_main_thread(unsigned long)",
+    "nx::thread_checkpoint(unsigned long)",
+    "nx::backtrace(nx::CPU&)",
+    "nx::handle_get(unsigned int)",
 })
 PROPRIETARY_MODULES = frozenset({"nx_module_main", "nx_module_sdk", "nx_module_subsdk0"})
 VIDEOOUT_IMPORTS = frozenset({
