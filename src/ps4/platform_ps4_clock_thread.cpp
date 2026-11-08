@@ -8,13 +8,13 @@
 #include <sched.h>
 #include <time.h>
 
-#if defined(__FreeBSD__)
+#if defined(KAZUMA_PS4)
 #include <orbis/libkernel.h>  // real Sony PS4 import: scePthreadGetthreadid
 #elif defined(__linux__)
 #include <sys/syscall.h>
 #include <unistd.h>
 #else
-#error "PS4 runtime clock/thread provider only supports FreeBSD PS4 and Linux host test"
+#error "PS4 runtime clock/thread provider requires explicit KAZUMA_PS4 target or Linux host test"
 #endif
 
 namespace nx::plat {
@@ -46,7 +46,7 @@ void yield() {
 }
 
 int64_t current_thread_id() {
-#if defined(__FreeBSD__)
+#if defined(KAZUMA_PS4)
     // PS4 libkernel native thread identifier, not an invented counter or
     // a cast of pthread_t (which is not necessarily an integer).
     return static_cast<int64_t>(scePthreadGetthreadid());
