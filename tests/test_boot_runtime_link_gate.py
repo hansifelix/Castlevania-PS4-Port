@@ -4,7 +4,7 @@ import sys
 import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools.link.boot_runtime_link_gate import (
-    inspect, PROVIDERS, KERNEL_PROVIDERS, HORIZON_SERVICE_PROVIDERS, FILE_IO_PROVIDERS, THREAD_CLOCK_PROVIDERS, THREAD_LAUNCH_PROVIDERS, PROPRIETARY_MODULES, VIDEOOUT_IMPORTS
+    inspect, PROVIDERS, KERNEL_PROVIDERS, HORIZON_SERVICE_PROVIDERS, FILE_IO_PROVIDERS, THREAD_CLOCK_PROVIDERS, THREAD_LAUNCH_PROVIDERS, APP0_PROVIDERS, PROPRIETARY_MODULES, VIDEOOUT_IMPORTS
 )
 
 def listing(items, ty):
@@ -97,6 +97,21 @@ class BootLinkTest(unittest.TestCase):
                              require_thread_launch=True)
         self.assertEqual(unresolved["status"], "FAIL")
         self.assertIn(one, unresolved["public_providers_still_undefined"])
+
+    def test_real_app0_config_providers_required_only_for_new_link(self):
+        defined = listing(PROVIDERS | APP0_PROVIDERS, "T")
+        missing = inspect(COMPLETE, UNDEFINED, require_app0=True)
+        self.assertEqual(missing["status"], "FAIL")
+        self.assertEqual(set(missing["missing_or_duplicated_providers"]), APP0_PROVIDERS)
+        r = inspect(defined, UNDEFINED, require_app0=True)
+        self.assertEqual(r["status"], "PASS")
+        self.assertEqual(r["app0_providers_defined"], 3)
+        self.assertFalse(r["aot_tables_linked"])
+        one = sorted(APP0_PROVIDERS)[0]
+        undefined = inspect(defined, UNDEFINED + " U " + one + "\n",
+                            require_app0=True)
+        self.assertEqual(undefined["status"], "FAIL")
+        self.assertIn(one, undefined["public_providers_still_undefined"])
 
     def test_missing_provider_fails(self):
         r=inspect(listing(set(PROVIDERS)-{"nx::boot()"},"T"),UNDEFINED)
