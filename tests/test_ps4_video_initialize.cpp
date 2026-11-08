@@ -27,10 +27,11 @@ void setter_original(nx::CPU& c) {++set_calls; assert(c.x[0]==1);}
 void initialize_original(nx::CPU& c) {
     ++initialize_calls;
     assert(c.x[0]!=0);
+    const unsigned prior_set_calls=set_calls;
     nx::CPU nested{};
     nested.x[0]=0;
     nx_castlevania_set_fullscreen_mode(nested, setter_original);
-    assert(set_calls==0); // Do not recursively apply fullscreen during initialization.
+    assert(set_calls==prior_set_calls); // No extra setter call during initialization.
 }
 }
 namespace nx {
