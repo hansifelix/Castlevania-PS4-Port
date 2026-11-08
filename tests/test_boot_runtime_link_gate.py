@@ -4,7 +4,7 @@ import sys
 import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools.link.boot_runtime_link_gate import (
-    inspect, PROVIDERS, KERNEL_PROVIDERS, HORIZON_SERVICE_PROVIDERS, FILE_IO_PROVIDERS, PROPRIETARY_MODULES, VIDEOOUT_IMPORTS
+    inspect, PROVIDERS, KERNEL_PROVIDERS, HORIZON_SERVICE_PROVIDERS, FILE_IO_PROVIDERS, THREAD_CLOCK_PROVIDERS, PROPRIETARY_MODULES, VIDEOOUT_IMPORTS
 )
 
 def listing(items, ty):
@@ -67,6 +67,21 @@ class BootLinkTest(unittest.TestCase):
                     require_file_io=True)
         self.assertEqual(r["status"], "FAIL")
         self.assertIn(missing, r["public_providers_still_undefined"])
+
+    def test_clock_and_thread_providers_are_real(self):
+        from tools.link.boot_runtime_link_gate import THREAD_CLOCK_PROVIDERS
+        base = listing(PROVIDERS, "T")
+        r = inspect(base, UNDEFINED, require_clock_thread=True)
+        self.assertEqual(r["status"], "FAIL")
+        self.assertEqual(set(r["missing_or_duplicated_providers"]), THREAD_CLOCK_PROVIDERS)
+        complete = listing(PROVIDERS | THREAD_CLOCK_PROVIDERS, "T")
+        r = inspect(complete, UNDEFINED, require_clock_thread=True)
+        self.assertEqual(r["status"], "PASS")
+        self.assertEqual(r["clock_thread_providers_defined"], 4)
+        r = inspect(complete, UNDEFINED + " U nx::plat::sleep_ns(long)\n",
+                    require_clock_thread=True)
+        self.assertEqual(r["status"], "FAIL")
+        self.assertIn("nx::plat::sleep_ns(long)", r["public_providers_still_undefined"])
 
     def test_missing_provider_fails(self):
         r=inspect(listing(set(PROVIDERS)-{"nx::boot()"},"T"),UNDEFINED)
