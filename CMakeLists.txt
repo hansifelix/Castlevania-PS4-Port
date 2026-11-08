@@ -64,6 +64,7 @@ if(Python3_Interpreter_FOUND)
     add_test(NAME sdk_cpp_preflight COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_sdk_cpp_preflight.py")
     add_test(NAME main_cpp_preflight COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_main_cpp_preflight.py")
     add_test(NAME aot_link_gate COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_aot_link_gate.py")
+    add_test(NAME video_callback_closure COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_video_callback_closure.py")
 endif()
 
 # Kazuma runtime etapa 3: relogio e sincronizacao testados somente no host.
