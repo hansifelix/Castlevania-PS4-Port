@@ -20,7 +20,7 @@ from tools.etapa42.diagnosticar_link import unique_errors
 
 MAX_EXAMPLES = 8
 LIBS = ("-lc++", "-lc", "-lkernel")
-EXTRA_LIB_RE = re.compile(r"[A-Za-z0-9_]+\\Z")
+EXTRA_LIB_RE = re.compile(r"[A-Za-z0-9_]+\Z")
 
 
 def _existing_file(path: Path, label: str) -> Path:
@@ -33,13 +33,13 @@ def _existing_file(path: Path, label: str) -> Path:
 
 def _extra_library_flags(extra_libs: list[str] | None) -> list[str]:
     names = list(extra_libs or [])
+    if any(not isinstance(name, str) or not EXTRA_LIB_RE.fullmatch(name) for name in names):
+        raise ValueError("Extra library must be a plain SDK library basename")
     reserved = {item[2:] for item in LIBS} | {"m"}
     if len(names) != len(set(names)):
         raise ValueError("Duplicate extra library name")
     flags = []
     for name in names:
-        if not isinstance(name, str) or not EXTRA_LIB_RE.fullmatch(name):
-            raise ValueError("Extra library must be a plain SDK library basename")
         if name in reserved:
             raise ValueError("Base SDK library must not be repeated as an extra library")
         flags.append("-l" + name)
