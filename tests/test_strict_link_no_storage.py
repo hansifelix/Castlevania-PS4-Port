@@ -15,7 +15,7 @@ class StrictDisklessLink(unittest.TestCase):
     def make_sdk(self, root: Path):
         sdk = root / "sdk"
         (sdk / "lib").mkdir(parents=True)
-        (sdk / "link.x").write_text("SECTIONS {}\\n")
+        (sdk / "link.x").write_text("SECTIONS {}\n")
         (sdk / "lib" / "crt1.o").write_bytes(b"fixture")
         (sdk / "lib" / "libm.a").write_bytes(b"fixture")
         obj = root / "private-aot.o"
@@ -62,8 +62,8 @@ class StrictDisklessLink(unittest.TestCase):
             root = Path(folder)
             sdk, obj = self.make_sdk(root)
             proc = SimpleNamespace(returncode=1, stderr=(
-                "ld.lld-18: error: undefined symbol: nx::plat::real_gpu\\n"
-                "ld.lld-18: error: undefined symbol: nx::plat::real_gpu\\n"
+                "ld.lld-18: error: undefined symbol: nx::plat::real_gpu\n"
+                "ld.lld-18: error: undefined symbol: nx::plat::real_gpu\n"
                 "ld.lld-18: error: unable to find library -lVulkan"))
             with mock.patch("tools.link.strict_link_no_storage.subprocess.run",
                             return_value=proc) as call:
