@@ -1,0 +1,38 @@
+name: "Kazuma PS4 - Static symbol gates"
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "tools/link/ps4_nvn_vulkan_closure.py"
+      - "tools/link/ps4_vkloader_icd_gate.py"
+      - "tools/link/ps4_radv_icd_gate.py"
+      - "tests/test_ps4_nvn_vulkan_closure.py"
+      - "tests/test_ps4_vkloader_icd_gate.py"
+      - "tests/test_ps4_radv_icd_gate.py"
+      - ".github/workflows/kazuma-static-symbol-gates.yml"
+  pull_request:
+    paths:
+      - "tools/link/ps4_nvn_vulkan_closure.py"
+      - "tools/link/ps4_vkloader_icd_gate.py"
+      - "tools/link/ps4_radv_icd_gate.py"
+      - "tests/test_ps4_nvn_vulkan_closure.py"
+      - "tests/test_ps4_vkloader_icd_gate.py"
+      - "tests/test_ps4_radv_icd_gate.py"
+      - ".github/workflows/kazuma-static-symbol-gates.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  static-symbol-gates:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run synthetic symbol-gate tests
+        run: |
+          set -euo pipefail
+          python3 tests/test_ps4_nvn_vulkan_closure.py
+          python3 tests/test_ps4_vkloader_icd_gate.py
+          python3 tests/test_ps4_radv_icd_gate.py
