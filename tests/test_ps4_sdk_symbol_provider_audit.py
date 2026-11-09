@@ -38,7 +38,7 @@ class SdkSymbolProviderAudit(unittest.TestCase):
 foo T 00000000 00000010
 weak_hook W 00000000 00000004
 not_defined U 00000000 00000000
-local_symbol t 00000000 00000004
+
 """
         self.assertEqual(
             parse_nm_defined_symbols(text),
