@@ -17,7 +17,7 @@ import sys
 from typing import Callable
 
 SYMBOL_ROW = re.compile(
-    r"^\\s*\\d+:\\s+[0-9A-Fa-f]+\\s+\\d+\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)(?:\\s+(.*?))?\\s*$"
+    r"^\s*\d+:\s+[0-9A-Fa-f]+\s+\d+\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)(?:\s+(.*?))?\s*$"
 )
 DEFINED_NM_TYPES = set("ABCDGIRSTVW")
 MAX_LIBRARY_FILES = 512
@@ -35,7 +35,7 @@ def parse_undefined_symbols(readelf_text: str) -> tuple[set[str], set[str]]:
             continue
         match = SYMBOL_ROW.match(raw)
         if not match:
-            if re.match(r"^\\s*\\d+:", raw):
+            if re.match(r"^\s*\d+:", raw):
                 raise ValueError(f"malformed readelf symbol row: {line[:120]}")
             continue
         _kind, binding, _visibility, section, name = match.groups()
