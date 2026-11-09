@@ -9,6 +9,8 @@ on:
       - 'tests/test_ps4_vkloader_icd_gate.py'
       - 'tools/link/ps4_radv_icd_gate.py'
       - 'tests/test_ps4_radv_icd_gate.py'
+      - 'tools/link/ps4_radv_symbol_inventory.py'
+      - 'tests/test_ps4_radv_symbol_inventory.py'
       - 'tools/link/strict_link_no_storage.py'
       - 'tests/test_strict_link_no_storage.py'
       - 'tests/test_ps4_nvn_vulkan_closure.py'
@@ -28,6 +30,7 @@ jobs:
           python3 tests/test_ps4_nvn_vulkan_closure.py
           python3 tests/test_ps4_vkloader_icd_gate.py
           python3 tests/test_ps4_radv_icd_gate.py
+          python3 tests/test_ps4_radv_symbol_inventory.py
           python3 tests/test_strict_link_no_storage.py
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18 git curl ca-certificates
@@ -145,8 +148,6 @@ jobs:
             count=$((count+1))
           done
           test "$count" -eq 5
-          # C source from immutable orbis-porting-kit v1.0.0, not a made-up
-          # implementation of vkGetInstanceProcAddr or of the Mesa RADV ICD.
           clang-18 --target=x86_64-pc-freebsd12-elf -std=c11 -O1 -fPIC \
             -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -D__ORBIS__=1 \
             -isysroot "$sdk" -isystem "$sdk/include" \
@@ -154,10 +155,6 @@ jobs:
             -c "$KAZUMA_REAL_VKLOADER/vkloader.c" \
             -o "$RUNNER_TEMP/nvn-gpu/5.o"
           test -s "$RUNNER_TEMP/nvn-gpu/5.o"
-          # The actual Mesa archive must supply vk_icdGetInstanceProcAddr.
-          # Do NOT add a second copy of addrlib/amd_common; the RADV archive
-          # already merges those and whole-archive of duplicates would break.
-          # All objects live ONLY on GitHub's temporary runner, not Drive.
           ld.lld-18 -m elf_x86_64 -r \
             -o "$RUNNER_TEMP/nvn-gpu/combined.o" \
             "$RUNNER_TEMP/nvn-gpu/"{0..5}.o \
@@ -168,6 +165,8 @@ jobs:
           llvm-nm-18 -C --undefined-only "$RUNNER_TEMP/nvn-gpu/combined.o" > "$RUNNER_TEMP/nvn-gpu/undefined.nm"
           python3 tools/link/ps4_radv_icd_gate.py \
             --defined "$RUNNER_TEMP/nvn-gpu/defined.nm" \
+            --undefined "$RUNNER_TEMP/nvn-gpu/undefined.nm"
+          python3 tools/link/ps4_radv_symbol_inventory.py \
             --undefined "$RUNNER_TEMP/nvn-gpu/undefined.nm"
           echo 'KAZUMA_NVNVK_RADV_ICD_PARTIAL_PASS: real Mesa archive included. Strict-link diagnostic follows; no frame, EBOOT or PKG.'
       - name: Strict PS4 link diagnostic for the real NVN/RADV slice (no ELF output)
