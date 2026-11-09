@@ -1,12 +1,26 @@
 # Kazuma Port Games BR — Etapa 63: ligar a ponte Vulkan ao Mesa/RADV real
 
-## Hipotese testada
+> **Atualização de estado — 2026-11-08**
+>
+> A Etapa 63 começou como uma sonda Vulkan independente. O trabalho posterior avançou a integração de código: o PR [#124](https://github.com/hansifelix/Castlevania-PS4-Port/pull/124), incorporado à `main` pelo commit `a00d175968365fa8d455044ac9d57caa47e1ce28`, integrou o arquivo real Mesa RADV ICD ao caminho NVN Vulkan/vkloader.
+>
+> Isso é integração de fonte e infraestrutura de ligação, **não** uma prova de link executável final. O gate RADV distingue explicitamente `PASS_PARTIAL_RADV` de sucesso final: exige os três provedores ICD reais e a ligação NVN/vkloader, mas não declara executável estrito, EBOOT/PKG ou execução de GPU.
+>
+> O PR [#125](https://github.com/hansifelix/Castlevania-PS4-Port/pull/125) adicionou CI leve para os três gates sintéticos. A execução #1 terminou com sucesso. Esse resultado valida os cenários de teste dos verificadores; **não** significa que um binário PS4 real foi compilado ou executado.
+>
+> **Estado confirmado:** integração de fonte Mesa RADV ICD no caminho NVN/vkloader; CI sintético dos gates aprovado.
+>
+> **Ainda não confirmado:** link executável estrito com o conjunto completo de dependências; criação de EBOOT/PKG atual; inicialização da Vulkan no PS4; apresentação de frame; jogo jogável.
+>
+> A descrição abaixo registra a hipótese e o plano originais da Etapa 63. Referências a uma compilação verde ou a uma sonda de diagnóstico devem ser lidas como critérios/plano daquela etapa, não como prova de que os resultados acima foram alcançados.
+
+## Hipótese testada
 
 A ponte `nx::plat` compilada na Etapa 62 precisa ser conectada a um provedor Vulkan real. Esta etapa usa o bundle *fixado* `orbis-sdk-v1`, composto de OpenOrbis, overlay e Mesa/RADV/WSI PS4 compatíveis, e liga `ps4_vulkan_bridge.cpp` a `ps4-vkloader` / `libvulkan_radeon.a`.
 
 A sonda de GPU é um app PS4 independente: ela cria uma `VkInstance`, pede a `VK_EXT_headless_surface` através da nossa ponte, enumera um dispositivo físico e consulta as propriedades da superfície. Não possui jogo, arte, dados do Switch ou shaders de Castlevania.
 
-A compilação verde comprova **linkagem** e **criação do eboot e PKG de diagnóstico**, não que as operações Vulkan funcionaram no console. Só logs vindos de hardware permitem declarar `INSTANCE=OK`, `SURFACE=OK`, `GPU=...`, `WSI_CAPS=OK` e `PONTE_GPU_REAL=OK`.
+**Critério original da sonda:** uma compilação verde comprovaria linkagem e criação do EBOOT e PKG de diagnóstico, mas não que as operações Vulkan funcionaram no console. Só logs vindos de hardware permitem declarar `INSTANCE=OK`, `SURFACE=OK`, `GPU=...`, `WSI_CAPS=OK` e `PONTE_GPU_REAL=OK`.
 
 ## Entradas e proveniência
 
