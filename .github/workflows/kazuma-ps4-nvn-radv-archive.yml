@@ -9,6 +9,8 @@ on:
       - 'tests/test_ps4_vkloader_icd_gate.py'
       - 'tools/link/ps4_radv_icd_gate.py'
       - 'tests/test_ps4_radv_icd_gate.py'
+      - 'tools/link/strict_link_no_storage.py'
+      - 'tests/test_strict_link_no_storage.py'
       - 'tests/test_ps4_nvn_vulkan_closure.py'
       - '.github/workflows/kazuma-ps4-nvn-radv-archive.yml'
   workflow_dispatch:
@@ -26,6 +28,7 @@ jobs:
           python3 tests/test_ps4_nvn_vulkan_closure.py
           python3 tests/test_ps4_vkloader_icd_gate.py
           python3 tests/test_ps4_radv_icd_gate.py
+          python3 tests/test_strict_link_no_storage.py
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18 git curl ca-certificates
       - name: Fetch pinned real runtime, OpenOrbis and Khronos Vulkan headers
@@ -166,5 +169,16 @@ jobs:
           python3 tools/link/ps4_radv_icd_gate.py \
             --defined "$RUNNER_TEMP/nvn-gpu/defined.nm" \
             --undefined "$RUNNER_TEMP/nvn-gpu/undefined.nm"
-          echo 'KAZUMA_NVNVK_RADV_ICD_PARTIAL_PASS: real Mesa archive included. No strict PS4 link, frame, EBOOT or PKG.'
+          echo 'KAZUMA_NVNVK_RADV_ICD_PARTIAL_PASS: real Mesa archive included. Strict-link diagnostic follows; no frame, EBOOT or PKG.'
+      - name: Strict PS4 link diagnostic for the real NVN/RADV slice (no ELF output)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/link/strict_link_no_storage.py \
+            --sdk "$KAZUMA_SDK" \
+            --object "$RUNNER_TEMP/nvn-gpu/combined.o" \
+            --linker ld.lld-18 \
+            --timeout 900 \
+            --error-limit 100 \
+            --extra-lib SceGnmDriver
       # Only log text; large combined Mesa object remains ephemeral on Actions runner.
