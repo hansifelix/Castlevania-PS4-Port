@@ -13,7 +13,7 @@ import re
 import sys
 
 SYMBOL = re.compile(
-    r"^\\s*\\d+:\\s+[0-9A-Fa-f]+\\s+\\d+\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)\\s+(\\S+)(?:\\s+(.*?))?\\s*$"
+    r"^\s*\d+:\s+[0-9A-Fa-f]+\s+\d+\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)(?:\s+(.*?))?\s*$"
 )
 MAX_EXAMPLES = 12
 
@@ -27,7 +27,7 @@ def inspect(text: str) -> dict:
             continue
         match = SYMBOL.match(raw)
         if not match:
-            if re.match(r"^\\s*\\d+:", raw):
+            if re.match(r"^\s*\d+:", raw):
                 raise ValueError(f"malformed readelf symbol row: {line[:120]}")
             continue
         kind, bind, visibility, section, name = match.groups()
