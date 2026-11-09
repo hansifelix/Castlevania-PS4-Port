@@ -8,7 +8,7 @@ from tools.link.ps4_radv_symbol_inventory import inspect
 
 
 def nm(kind: str, name: str) -> str:
-    return f"                 {kind} {name}\\n"
+    return f"                 {kind} {name}\n"
 
 
 class RadvSymbolInventory(unittest.TestCase):
@@ -34,8 +34,8 @@ class RadvSymbolInventory(unittest.TestCase):
         self.assertEqual(counts["NX_PLATFORM"], 1)
         self.assertEqual(counts["NX_OTHER"], 1)
         self.assertEqual(counts["SCE_SDK"], 1)
-        self.assertEqual(counts["VULKAN_API"], 2)
-        self.assertEqual(counts["MESA_RADV"], 1)
+        self.assertEqual(counts["VULKAN_API"], 1)
+        self.assertEqual(counts["MESA_RADV"], 2)
         self.assertEqual(counts["CXX_ABI"], 2)
         self.assertEqual(counts["C_LIBC_POSIX"], 1)
         self.assertEqual(counts["OTHER_EXTERNAL"], 1)
