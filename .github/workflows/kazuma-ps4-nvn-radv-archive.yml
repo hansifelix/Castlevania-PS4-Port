@@ -11,6 +11,8 @@ on:
       - 'tests/test_ps4_radv_icd_gate.py'
       - 'tools/link/ps4_radv_symbol_inventory.py'
       - 'tests/test_ps4_radv_symbol_inventory.py'
+      - 'tools/link/ps4_elf_undefined_types.py'
+      - 'tests/test_ps4_elf_undefined_types.py'
       - 'tools/link/strict_link_no_storage.py'
       - 'tests/test_strict_link_no_storage.py'
       - 'tests/test_ps4_nvn_vulkan_closure.py'
@@ -31,6 +33,7 @@ jobs:
           python3 tests/test_ps4_vkloader_icd_gate.py
           python3 tests/test_ps4_radv_icd_gate.py
           python3 tests/test_ps4_radv_symbol_inventory.py
+          python3 tests/test_ps4_elf_undefined_types.py
           python3 tests/test_strict_link_no_storage.py
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18 git curl ca-certificates
@@ -65,7 +68,6 @@ jobs:
       - name: Fetch immutable paired Mesa/RADV/headers/zlib PS4 bundle
         run: |
           set -euo pipefail
-          # The Etapa 63 already pins this exact tarball SHA-256.
           mkdir -p "$RUNNER_TEMP/radv-bundle"
           curl -fLsS --retry 5 --retry-delay 5 \
             'https://github.com/orbis-ports/orbis-porting-kit/releases/download/orbis-sdk-v1/orbis-sdk-v1.tar.gz' \
@@ -82,11 +84,8 @@ jobs:
           test "${#zlibs[@]}" -eq 1 && test -s "${zlibs[0]}"
           echo "KAZUMA_RADV_ARCHIVE=$radv" >> "$GITHUB_ENV"
           echo "KAZUMA_ZLIB_ARCHIVE=${zlibs[0]}" >> "$GITHUB_ENV"
-          # Paired Mesa source headers have priority over Khronos fallback,
-          # because mixing struct layouts can compile but crash at runtime.
           echo "KAZUMA_VK_INCLUDE=$mesa/include" >> "$GITHUB_ENV"
           echo "KAZUMA_KHRONOS_INCLUDE=$RUNNER_TEMP/vkh/include" >> "$GITHUB_ENV"
-          echo "KAZUMA_MESA_BUNDLE_SHA256=f4f079a4df334b46a76996f895283904283d6a006f97102aafaa53d4ecfc9622" >> "$GITHUB_ENV"
       - name: Patch only runner C++20 cpu.h to match OpenOrbis libc++
         run: |
           set -euo pipefail
@@ -163,11 +162,14 @@ jobs:
           test -s "$RUNNER_TEMP/nvn-gpu/combined.o"
           llvm-nm-18 -C --defined-only "$RUNNER_TEMP/nvn-gpu/combined.o" > "$RUNNER_TEMP/nvn-gpu/defined.nm"
           llvm-nm-18 -C --undefined-only "$RUNNER_TEMP/nvn-gpu/combined.o" > "$RUNNER_TEMP/nvn-gpu/undefined.nm"
+          llvm-readelf-18 --symbols --wide "$RUNNER_TEMP/nvn-gpu/combined.o" > "$RUNNER_TEMP/nvn-gpu/symbols.readelf"
           python3 tools/link/ps4_radv_icd_gate.py \
             --defined "$RUNNER_TEMP/nvn-gpu/defined.nm" \
             --undefined "$RUNNER_TEMP/nvn-gpu/undefined.nm"
           python3 tools/link/ps4_radv_symbol_inventory.py \
             --undefined "$RUNNER_TEMP/nvn-gpu/undefined.nm"
+          python3 tools/link/ps4_elf_undefined_types.py \
+            --symbols "$RUNNER_TEMP/nvn-gpu/symbols.readelf"
           echo 'KAZUMA_NVNVK_RADV_ICD_PARTIAL_PASS: real Mesa archive included. Strict-link diagnostic follows; no frame, EBOOT or PKG.'
       - name: Strict PS4 link diagnostic for the real NVN/RADV slice (no ELF output)
         shell: bash
