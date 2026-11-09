@@ -12,7 +12,7 @@ from pathlib import Path
 import re
 import sys
 
-LINE = re.compile(r"^\\s*(?:[0-9a-fA-F]+\\s+)?([A-Za-z])\\s+(.+?)\\s*$")
+LINE = re.compile(r"^\s*(?:[0-9a-fA-F]+\s+)?([A-Za-z])\s+(.+?)\s*$")
 WEAK_TYPES = {"w", "v"}
 STRONG_TYPE = "U"
 EXAMPLES_PER_CATEGORY = 12
