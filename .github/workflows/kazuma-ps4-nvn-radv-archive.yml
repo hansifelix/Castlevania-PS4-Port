@@ -60,7 +60,7 @@ jobs:
           echo "KAZUMA_SDK=$(dirname "$sdk_link")" >> "$GITHUB_ENV"
           git clone -q --filter=blob:none --sparse https://github.com/SwonDev/cstlvnia-blmont-to-macos.git "$RUNNER_TEMP/nx-src"
           git -C "$RUNNER_TEMP/nx-src" checkout -q --detach 4043f21bb4f656d34cd17ba070238c7728d00631
-          git -C "$RUNNER_TEMP/nx-src" sparse-checkout set CMakeLists.txt runtime/src runtime/include/nx games/castlevania
+          git -C "$RUNNER_TEMP/nx-src" sparse-checkout set runtime/src runtime/include/nx games/castlevania
           test -s "$RUNNER_TEMP/nx-src/runtime/src/nvn/nvn_vk.cpp"
           echo "KAZUMA_NX_SOURCE=$RUNNER_TEMP/nx-src" >> "$GITHUB_ENV"
           git clone -q --filter=blob:none --sparse https://github.com/KhronosGroup/Vulkan-Headers.git "$RUNNER_TEMP/vkh"
