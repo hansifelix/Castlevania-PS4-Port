@@ -18,6 +18,8 @@ on:
       - 'tools/link/ps4_sdk_symbol_provider_audit.py'
       - 'tests/test_ps4_sdk_symbol_provider_audit.py'
       - 'tools/link/strict_link_unlimited.py'
+      - 'tools/link/compile_full_runtime.py'
+      - 'tests/test_compile_full_runtime.py'
       - 'tests/test_strict_link_unlimited.py'
       - 'tests/test_ps4_nvn_vulkan_closure.py'
       - '.github/workflows/kazuma-ps4-nvn-radv-archive.yml'
@@ -41,6 +43,7 @@ jobs:
           python3 tests/test_strict_link_no_storage.py
           python3 tests/test_ps4_sdk_symbol_provider_audit.py
           python3 tests/test_strict_link_unlimited.py
+          python3 tests/test_compile_full_runtime.py
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18 git curl ca-certificates
       - name: Fetch pinned real runtime, OpenOrbis and Khronos Vulkan headers
@@ -57,7 +60,7 @@ jobs:
           echo "KAZUMA_SDK=$(dirname "$sdk_link")" >> "$GITHUB_ENV"
           git clone -q --filter=blob:none --sparse https://github.com/SwonDev/cstlvnia-blmont-to-macos.git "$RUNNER_TEMP/nx-src"
           git -C "$RUNNER_TEMP/nx-src" checkout -q --detach 4043f21bb4f656d34cd17ba070238c7728d00631
-          git -C "$RUNNER_TEMP/nx-src" sparse-checkout set runtime/src runtime/include/nx
+          git -C "$RUNNER_TEMP/nx-src" sparse-checkout set CMakeLists.txt runtime/src runtime/include/nx games/castlevania
           test -s "$RUNNER_TEMP/nx-src/runtime/src/nvn/nvn_vk.cpp"
           echo "KAZUMA_NX_SOURCE=$RUNNER_TEMP/nx-src" >> "$GITHUB_ENV"
           git clone -q --filter=blob:none --sparse https://github.com/KhronosGroup/Vulkan-Headers.git "$RUNNER_TEMP/vkh"
@@ -127,45 +130,62 @@ jobs:
                            .replace("std::rotr(","kazuma_cpu_compat::rotr("))
           (Path(os.environ["RUNNER_TEMP"])/"compat/nx/cpu.h").write_text(patched)
           PY
-      - name: Relocatable-link original NVN + official loader + Mesa RADV ICD
+      - name: Compilar adaptadores Vulkan PS4 e vkloader oficial
         run: |
           set -euo pipefail
           src="$KAZUMA_NX_SOURCE/runtime"
           sdk="$KAZUMA_SDK"
           mkdir -p "$RUNNER_TEMP/nvn-gpu"
           count=0
-          objects=()
           for source in \
-              "$src/src/nvn/nvn_vk.cpp" \
-              "$src/src/nvn/nvn_shaders.cpp" \
-              "$src/src/nvn/nvn_gpu_pick.cpp" \
               tools/etapa62/ps4_vulkan_bridge.cpp \
               src/ps4/platform_ps4_vulkan_loader.cpp; do
             obj="$RUNNER_TEMP/nvn-gpu/$count.o"
             clang++-18 --target=x86_64-pc-freebsd12-elf -std=c++20 -O1 -fPIC \
               -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -DKAZUMA_PS4_REAL_VULKAN=1 \
               -isysroot "$sdk" -isystem "$sdk/include" -isystem "$sdk/include/c++/v1" \
-              -I"$RUNNER_TEMP/compat" -I"$src/include" -I"$src/src" -I"$src/src/nvn" \
+              -I"$RUNNER_TEMP/compat" -I"$src/include" -I"$src/src" \
               -I"$KAZUMA_VK_INCLUDE" -I"$KAZUMA_KHRONOS_INCLUDE" -include algorithm \
               -c "$source" -o "$obj"
             test -s "$obj"
-            objects+=("$obj")
             count=$((count+1))
           done
-          test "$count" -eq 5
+          test "$count" -eq 2
           clang-18 --target=x86_64-pc-freebsd12-elf -std=c11 -O1 -fPIC \
             -D_POSIX_C_SOURCE=200809L -D_GNU_SOURCE -D__ORBIS__=1 \
             -isysroot "$sdk" -isystem "$sdk/include" \
             -I"$KAZUMA_VK_INCLUDE" -I"$KAZUMA_KHRONOS_INCLUDE" -I"$KAZUMA_REAL_VKLOADER" \
             -c "$KAZUMA_REAL_VKLOADER/vkloader.c" \
-            -o "$RUNNER_TEMP/nvn-gpu/5.o"
-          test -s "$RUNNER_TEMP/nvn-gpu/5.o"
+            -o "$RUNNER_TEMP/nvn-gpu/2.o"
+          test -s "$RUNNER_TEMP/nvn-gpu/2.o"
+          ld.lld-18 -m elf_x86_64 -r \
+            -o "$RUNNER_TEMP/nvn-gpu/gpu-adapters.o" \
+            "$RUNNER_TEMP/nvn-gpu/"{0..2}.o
+          test -s "$RUNNER_TEMP/nvn-gpu/gpu-adapters.o"
+          echo 'KAZUMA_PS4_VULKAN_BRIDGE_AND_OFFICIAL_VKLOADER=COMPILED_NO_GAME'
+
+      - name: Compilar runtime publico completo e unir NVN com Mesa RADV
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 tools/link/compile_full_runtime.py \
+            --upstream "$KAZUMA_NX_SOURCE" \
+            --sdk "$KAZUMA_SDK" \
+            --compat "$RUNNER_TEMP/compat" \
+            --vulkan "$KAZUMA_KHRONOS_INCLUDE" \
+            --mesa "$KAZUMA_VK_INCLUDE" \
+            --out "$RUNNER_TEMP/runtime-objects"
+          count="$(find "$RUNNER_TEMP/runtime-objects" -maxdepth 1 -type f -name '*.o' | wc -l)"
+          test "$count" -eq 88
           ld.lld-18 -m elf_x86_64 -r \
             -o "$RUNNER_TEMP/nvn-gpu/combined.o" \
-            "$RUNNER_TEMP/nvn-gpu/"{0..5}.o \
+            "$RUNNER_TEMP/runtime-objects/"*.o \
+            "$RUNNER_TEMP/nvn-gpu/gpu-adapters.o" \
             --whole-archive "$KAZUMA_RADV_ARCHIVE" --no-whole-archive \
             "$KAZUMA_ZLIB_ARCHIVE"
           test -s "$RUNNER_TEMP/nvn-gpu/combined.o"
+          llvm-readelf-18 --file-header "$RUNNER_TEMP/nvn-gpu/combined.o" \
+            | grep -E 'Class:|Machine:'
           llvm-nm-18 -C --defined-only "$RUNNER_TEMP/nvn-gpu/combined.o" > "$RUNNER_TEMP/nvn-gpu/defined.nm"
           llvm-nm-18 -C --undefined-only "$RUNNER_TEMP/nvn-gpu/combined.o" > "$RUNNER_TEMP/nvn-gpu/undefined.nm"
           llvm-readelf-18 --symbols --wide "$RUNNER_TEMP/nvn-gpu/combined.o" > "$RUNNER_TEMP/nvn-gpu/symbols.readelf"
@@ -181,8 +201,9 @@ jobs:
             --lib-dir "$KAZUMA_SDK/lib" \
             --nm llvm-nm-18 \
             --timeout 20
+          echo 'KAZUMA_FULL_PUBLIC_RUNTIME_PLUS_NVNVK_RADV=RELOCATABLE_ELF64_ONLY'
           echo 'KAZUMA_PS4_SDK_IMPORT_PROVIDER_AUDIT=COMPLETE_PRESENCE_ONLY_NOT_LINK_RESOLUTION'
-          echo 'KAZUMA_NVNVK_RADV_ICD_PARTIAL_PASS: real Mesa archive included. Strict-link diagnostic follows; no frame, EBOOT or PKG.'
+          echo 'KAZUMA_GAME_AOT_AND_HARDWARE=NOT_INCLUDED_NOT_TESTED'
       - name: Strict PS4 link diagnostic for the real NVN/RADV slice (no ELF output)
         shell: bash
         run: |
