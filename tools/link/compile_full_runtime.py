@@ -101,6 +101,8 @@ def build_compile_command(
         "-I",
         str(upstream / "runtime/src"),
         "-I",
+        str(upstream / "runtime/src/nvn"),
+        "-I",
         str(upstream / "games/castlevania"),
         "-I",
         str(vulkan_include),
