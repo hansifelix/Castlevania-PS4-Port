@@ -82,6 +82,7 @@ class FullRuntimeCompileContracts(unittest.TestCase):
         self.assertIn("/sdk/include/c++/v1", command)
         self.assertIn("/compat", command)
         self.assertIn("/upstream/runtime/include", command)
+        self.assertIn("/upstream/runtime/src/nvn", command)
         self.assertIn("/vulkan/include", command)
         self.assertIn("/mesa/include", command)
         self.assertEqual(command[command.index("-o") + 1], "/tmp/out.o")
