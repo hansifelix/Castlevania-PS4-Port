@@ -1,10 +1,12 @@
 import hashlib
+import io
 import json
 from pathlib import Path
 import struct
 import sys
 import tempfile
 import unittest
+import tarfile
 import zipfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -84,6 +86,37 @@ class PrivateAotObjectAuditTests(unittest.TestCase):
             self.assertTrue(report["files_extracted"] is False)
             self.assertTrue(report["compilation_performed"] is False)
             self.assertTrue(report["link_performed"] is False)
+
+    def test_tar_gz_members_are_audited_without_filesystem_extraction(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive_path = root / "KazumaMAIN_b308aab38edf_backup.tar.gz"
+            blob = elf_header(entry=17)
+            manifest = {"main/code_0000.o": hashlib.sha256(blob).hexdigest()}
+            with tarfile.open(archive_path, mode="w:gz") as archive:
+                for name, payload in (
+                    ("main/code_0000.o", blob),
+                    ("main/manifest.json", json.dumps(manifest).encode("utf-8")),
+                ):
+                    info = tarfile.TarInfo(name)
+                    info.size = len(payload)
+                    archive.addfile(info, io.BytesIO(payload))
+
+            before = archive_path.read_bytes()
+            report = audit(root)
+            after = archive_path.read_bytes()
+
+            self.assertEqual(before, after)
+            self.assertEqual(report["archive_format_counts"], {"TAR_GZ": 1})
+            self.assertEqual(report["tar_gz_archives_found"], 1)
+            self.assertEqual(report["archive_members_enumerated"], 2)
+            self.assertEqual(report["module_results"]["main"]["unique_indices_found"], 1)
+            self.assertEqual(report["module_results"]["main"]["elf64_et_rel_x86_64_valid_copies"], 1)
+            self.assertEqual(report["manifest_hash_matches"], 1)
+            self.assertEqual(report["invalid_objects"], [])
+            self.assertFalse(report["inputs_modified"])
+            self.assertFalse(report["files_extracted"])
+            self.assertFalse(any(p.name == "code_0000.o" for p in root.iterdir()))
 
     def test_identical_backup_replicas_are_not_conflicts(self):
         with tempfile.TemporaryDirectory() as tmp:
