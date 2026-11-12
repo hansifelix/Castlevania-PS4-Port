@@ -68,14 +68,16 @@ A auditoria de inventário de 11/11 encontrou 381 arquivos relevantes, 4.437 mem
 
 ## Ferramenta nova
 
-`tools/etapa90/audit_private_aot_objects.py` faz leitura somente-leitura de arquivos soltos e membros ZIP, sem extrair nada. Para cada `code_NNN.o`:
+`tools/etapa90/audit_private_aot_objects.py` faz leitura somente-leitura de arquivos soltos e membros ZIP e TAR.GZ, sem escrever arquivos extraídos no Drive. Para cada `code_NNN.o`:
 
 - Calcula SHA-256;
 - Valida ELF64 little-endian, ET_REL e x86-64;
 - Reconhece os intervalos de índices de MAIN, SDK e subsdk0;
 - Conta réplicas idênticas de backup separadamente de conflitos de hash;
 - Confronta manifests JSON e SHA256SUMS legíveis por módulo/índice;
-- Detecta nomes de membros ZIP duplicados e arquivos compactados ilegíveis.
+- Detecta nomes de membros ZIP/TAR duplicados e arquivos compactados ilegíveis.
+- Reconhece TAR.GZ/TGZ e lê cada membro por stream somente-leitura para validar objetos e hashes, sem materializar arquivos no Drive.
+- Inventa um inventário de extensões, assinaturas binárias e nomes de membros para investigar lotes históricos.
 
 Não compila, não liga, não move, não apaga, não renomeia e não publica conteúdo comercial. O relatório contém somente metadados, hashes e caminhos relativos.
 
@@ -87,7 +89,7 @@ python3 tools/etapa90/audit_private_aot_objects.py \
   --report "/caminho/privado/fora-da-pasta-auditada/RELATORIO_ETAPA90B.json"
 ```
 
-O relatório deve ficar fora da pasta de entrada. A ferramenta não extrai arquivos ZIP. Se os manifests estiverem em formato não reconhecido ou não cobrirem os 1.916 índices únicos, o resultado será `PASS_STRUCTURE_ELF_MANIFESTS_INCOMPLETE`, nunca integridade completa.
+O relatório deve ficar fora da pasta de entrada. A ferramenta não grava arquivos extraídos: ZIP e TAR.GZ são lidos por streams somente-leitura. Arquivos 7Z/RAR ainda aparecem no inventário como formatos detectados, mas seus membros não são inspecionados. Se os manifests estiverem em formato não reconhecido ou não cobrirem os 1.916 índices únicos, o resultado será `PASS_STRUCTURE_ELF_MANIFESTS_INCOMPLETE`, nunca integridade completa.
 
 ## Estados
 
