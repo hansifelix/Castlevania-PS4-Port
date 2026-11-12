@@ -33,6 +33,8 @@ class StrictDisklessLink(unittest.TestCase):
             self.assertIn("--fatal-warnings", cmd)
             self.assertEqual(cmd.count(str(obj)), 1)
             self.assertIn("-lc++", cmd)
+            self.assertIn("-lc++abi", cmd)
+            self.assertIn("-lunwind", cmd)
             self.assertIn("-lkernel", cmd)
             self.assertIn("-lm", cmd)
             self.assertFalse(any(x.endswith(".pkg") for x in cmd))
