@@ -24,15 +24,37 @@ SHA_LINE = re.compile(r"^\s*([0-9a-fA-F]{64})\s+[* ]?(.+?)\s*$")
 
 
 def module_for(parts: tuple[str, ...]) -> str | None:
+    """Infer AOT module from folder, archive, or backup filename.
+
+    Backups have historically used names such as KazumaMAIN_..., 
+    Kazuma_Castlevania_MAIN_..., and Kazuma85_subsdk0_..., not only
+    directories literally named MAIN/SDK/subsdk0.
+    """
     found = set()
     for part in parts:
         token = PurePosixPath(part).name.lower()
-        token = re.sub(r"\.(zip|7z|tar|tgz|gz)$", "", token)
-        for module in EXPECTED:
-            if token == module or token.startswith(module + "_") or token.startswith(module + "-"):
-                found.add(module)
+        token = re.sub(r"\\.(zip|7z|tar|tgz|gz|rar)$", "", token)
+        compact = re.sub(r"[^a-z0-9]", "", token)
+        # Check the more specific subsdk0 marker before generic SDK hints.
+        if "subsdk0" in compact:
+            found.add("subsdk0")
+        if (
+            compact in {"main", "kazumamain"}
+            or "kazumamain" in compact
+            or "castlevaniamain" in compact
+            or token.startswith("main_")
+            or token.startswith("main-")
+        ):
+            found.add("main")
+        if (
+            compact in {"sdk", "kazumasdk"}
+            or "kazumasdk" in compact
+            or "castlevaniasdk" in compact
+            or token.startswith("sdk_")
+            or token.startswith("sdk-")
+        ):
+            found.add("sdk")
     return next(iter(found)) if len(found) == 1 else None
-
 
 def elf64_rel_x86_64(header: bytes) -> tuple[bool, str]:
     if len(header) < 64:
