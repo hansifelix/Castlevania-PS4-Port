@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Read-only integrity audit for private Castlevania AOT object backups.
 
-Scans loose files and ZIP members without extracting or modifying them.
+Scans loose files, ZIP members, and TAR.GZ members without writing extracted files or modifying inputs.
 Reports module/index coverage, ELF64 ET_REL x86-64 headers, SHA-256 hashes,
 archive member counts, and any readable SHA256SUMS-style manifest matches.
 Never compiles, links, uploads, deletes, renames, or rewrites private inputs.
@@ -9,6 +9,7 @@ Never compiles, links, uploads, deletes, renames, or rewrites private inputs.
 from __future__ import annotations
 
 import argparse
+import gzip
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
@@ -16,6 +17,7 @@ import re
 import stat
 import struct
 import sys
+import tarfile
 import zipfile
 
 EXPECTED = {"main": 1707, "sdk": 136, "subsdk0": 73}
@@ -166,6 +168,9 @@ def audit(root: Path) -> dict:
     manifest_by_basename: dict[str, set[str]] = {}
     archive_count = 0
     archive_members = 0
+    archive_format_counts: dict[str, int] = {}
+    gzip_files_not_tar: list[str] = []
+    tar_archives_found = 0
     manifests_seen = 0
     manifest_files_with_hashes = 0
     loose_files = 0
@@ -223,6 +228,7 @@ def audit(root: Path) -> dict:
             raw_elf_candidates.append(candidate)
         if zipfile.is_zipfile(path):
             archive_count += 1
+            archive_format_counts["ZIP"] = archive_format_counts.get("ZIP", 0) + 1
             try:
                 with zipfile.ZipFile(path) as archive:
                     names = archive.namelist()
@@ -277,6 +283,76 @@ def audit(root: Path) -> dict:
             except (OSError, zipfile.BadZipFile, RuntimeError) as exc:
                 unreadable_archives.append({"archive": rel, "reason": type(exc).__name__})
             continue
+
+        # TAR.GZ/TGZ is streamed through tarfile; extractfile() returns a
+        # read-only member stream and never writes extracted files to Drive.
+        if signature == "GZIP" and path.name.lower().endswith((".tar.gz", ".tgz")):
+            archive_count += 1
+            tar_archives_found += 1
+            archive_format_counts["TAR_GZ"] = archive_format_counts.get("TAR_GZ", 0) + 1
+            try:
+                with tarfile.open(path, mode="r:gz") as archive:
+                    members = archive.getmembers()
+                    archive_members += len(members)
+                    member_names = [item.name for item in members]
+                    if len(member_names) != len(set(member_names)):
+                        duplicate_archive_names.append(rel)
+                    for info in members:
+                        if not info.isfile():
+                            continue
+                        inner = info.name.replace("\\", "/")
+                        module = module_for(tuple(PurePosixPath(inner).parts)) or module_for(tuple(Path(rel).parts))
+                        member_sha = None
+                        try:
+                            member_stream = archive.extractfile(info)
+                            if member_stream is None:
+                                raise OSError("tar_member_stream_unavailable")
+                            with member_stream:
+                                if is_manifest(inner):
+                                    raw = member_stream.read()
+                                    inner_head = raw[:64]
+                                elif OBJECT.fullmatch(PurePosixPath(inner).name) and module:
+                                    member_sha, inner_head = digest_stream(member_stream)
+                                else:
+                                    inner_head = member_stream.read(64)
+                            inner_signature = identify_signature(inner_head)
+                            if len(archive_member_inventory) < 250:
+                                archive_member_inventory.append({
+                                    "archive": rel,
+                                    "member": inner,
+                                    "size_bytes": info.size,
+                                    "signature": inner_signature,
+                                    "module_hint": module,
+                                })
+                            if is_manifest(inner):
+                                manifests_seen += 1
+                                parsed = parse_manifest(raw)
+                                if parsed:
+                                    manifest_files_with_hashes += 1
+                                    for key, value in parsed.items():
+                                        normalized = key.lower()
+                                        manifest_entries.setdefault(normalized, set()).add(value)
+                                        basename = PurePosixPath(normalized).name
+                                        manifest_by_basename.setdefault(basename, set()).add(value)
+                                        manifest_module = module_for(tuple(PurePosixPath(normalized).parts)) or module
+                                        manifest_object = OBJECT.fullmatch(basename)
+                                        if manifest_module and manifest_object:
+                                            key = (manifest_module, int(manifest_object.group(1)))
+                                            manifest_by_module_index.setdefault(key, set()).add(value)
+                            elif member_sha is not None:
+                                record(module, inner, member_sha, inner_head, f"{rel}::{inner}")
+                        except (OSError, EOFError, RuntimeError, tarfile.TarError, gzip.BadGzipFile):
+                            invalid_objects.append({
+                                "module": module,
+                                "source": f"{rel}::{inner}",
+                                "reason": "tar_member_read_failed",
+                            })
+            except (OSError, EOFError, tarfile.TarError, gzip.BadGzipFile) as exc:
+                unreadable_archives.append({"archive": rel, "reason": type(exc).__name__})
+            continue
+
+        if signature == "GZIP" and not path.name.lower().endswith((".tar.gz", ".tgz")):
+            gzip_files_not_tar.append(rel)
 
         loose_files += 1
         if is_manifest(rel):
@@ -370,6 +446,9 @@ def audit(root: Path) -> dict:
         "audit_mode": "READ_ONLY_NO_EXTRACT_NO_COMPILE_NO_LINK",
         "input_root": root.name,
         "archives_found": archive_count,
+        "archive_format_counts": dict(sorted(archive_format_counts.items())),
+        "tar_gz_archives_found": tar_archives_found,
+        "gzip_files_not_tar": gzip_files_not_tar,
         "archive_members_enumerated": archive_members,
         "loose_files_enumerated": loose_files,
         "manifest_files_found": manifests_seen,
