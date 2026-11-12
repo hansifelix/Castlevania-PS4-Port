@@ -25,4 +25,7 @@ jobs:
       - name: Compilar adaptador de controle
         run: cmake --build build --parallel 2
       - name: Executar testes C++ e Python (dados ficticios)
-        run: ctest --test-dir build --output-on-failure
+        run: |
+          set -euo pipefail
+          ctest --test-dir build --output-on-failure
+          python3 tests/test_private_aot_object_audit.py
