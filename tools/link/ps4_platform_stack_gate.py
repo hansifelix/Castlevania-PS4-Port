@@ -52,6 +52,8 @@ REQUIRED = frozenset({
     "nx::plat::headless()",
     "nx::plat::memguard_overlap_ns(unsigned long, unsigned long)",
     "nx::plat::profile(long const*, unsigned long const* const*, unsigned long, int, std::__1::basic_string<char, std::__1::char_traits<char>, std::__1::allocator<char>> const&)",
+    "orbis_sysconf",
+    "__cxa_thread_atexit_impl",
 })
 
 PRIVATE_AOT = frozenset({
@@ -71,6 +73,11 @@ REAL_IMPORTS = frozenset({
     "sceUserServiceGetInitialUser",
     "scePthreadCreate",
     "scePthreadRename",
+    "sysconf",
+    "pthread_key_create",
+    "pthread_once",
+    "pthread_getspecific",
+    "pthread_setspecific",
 })
 
 
