@@ -12,8 +12,8 @@ from tools.link.compile_ps4_platform_stack import (
 
 
 class CompilePS4PlatformStackTests(unittest.TestCase):
-    def test_manifest_has_twelve_unique_reviewed_sources(self):
-        self.assertEqual(len(PLATFORM_SOURCES), 12)
+    def test_manifest_has_fourteen_unique_reviewed_sources(self):
+        self.assertEqual(len(PLATFORM_SOURCES), 14)
         self.assertEqual(len(set(PLATFORM_SOURCES)), 12)
         required = {
             "tools/etapa50/platform_ps4_memory.cpp",
@@ -26,6 +26,8 @@ class CompilePS4PlatformStackTests(unittest.TestCase):
             "src/ps4/platform_ps4_thread_launch.cpp",
             "src/ps4/platform_ps4_thread_name.cpp",
             "src/ps4/platform_ps4_optional_services.cpp",
+            "src/ps4/platform_ps4_sysconf.cpp",
+            "src/ps4/platform_ps4_thread_atexit.cpp",
             "src/runtime_bridge/linked_modules_castlevania.cpp",
             "src/ps4/main.cpp",
         }
