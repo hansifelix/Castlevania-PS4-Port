@@ -244,10 +244,11 @@ jobs:
           echo 'KAZUMA_FULL_PUBLIC_RUNTIME_AND_PS4_PLATFORM=RELOCATABLE_ELF64_ONLY'
           echo 'KAZUMA_PS4_SDK_IMPORT_PROVIDER_AUDIT=COMPLETE_PRESENCE_ONLY_NOT_LINK_RESOLUTION'
           echo 'KAZUMA_GAME_AOT_AND_HARDWARE=NOT_INCLUDED_NOT_TESTED'
-      - name: Strict PS4 link diagnostic for the real NVN/RADV slice (no ELF output)
+      - name: Strict PS4 link diagnostic — accept only private AOT imports as pending
         shell: bash
         run: |
           set -euo pipefail
+          set +e
           python3 tools/link/strict_link_unlimited.py \
             --sdk "$KAZUMA_SDK" \
             --object "$RUNNER_TEMP/nvn-gpu/combined.o" \
@@ -259,5 +260,14 @@ jobs:
             --extra-lib ScePad \
             --extra-lib SceUserService \
             --extra-lib SceLibcInternal \
-            --extra-lib ScePosix
+            --extra-lib ScePosix > "$RUNNER_TEMP/nvn-gpu/strict-link.json"
+          link_rc=$?
+          set -e
+          if [ "$link_rc" -ne 2 ]; then
+            echo "Unexpected strict-link exit code: $link_rc" >&2
+            cat "$RUNNER_TEMP/nvn-gpu/strict-link.json"
+            exit 1
+          fi
+          python3 tools/link/classify_public_link.py \
+            --report "$RUNNER_TEMP/nvn-gpu/strict-link.json"
       # Only log text; large combined Mesa object remains ephemeral on Actions runner.
