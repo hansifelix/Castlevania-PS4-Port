@@ -27,7 +27,7 @@ def module_for(parts: tuple[str, ...]) -> str | None:
     found = set()
     for part in parts:
         token = PurePosixPath(part).name.lower()
-        token = re.sub(r"\\.(zip|7z|tar|tgz|gz)$", "", token)
+        token = re.sub(r"\.(zip|7z|tar|tgz|gz)$", "", token)
         for module in EXPECTED:
             if token == module or token.startswith(module + "_") or token.startswith(module + "-"):
                 found.add(module)
