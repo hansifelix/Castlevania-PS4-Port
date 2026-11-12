@@ -54,7 +54,7 @@ class PrivateAotSymbolInventoryTests(unittest.TestCase):
             "_same_module_fn": {"MAIN:10"},
         }
         result = build_provider_candidates(definitions, undefined)
-        self.assertEqual(result["_shared_fn"]["MAIN:5"], ["SDK:8"])
+        self.assertEqual(result["_shared_fn"]["MAIN:5"], ["MAIN:4", "SDK:8"])
         self.assertEqual(result["_shared_fn"]["subsdk0:2"], ["MAIN:4", "SDK:8"])
         self.assertEqual(result["_same_module_fn"]["MAIN:10"], ["MAIN:9"])
 
