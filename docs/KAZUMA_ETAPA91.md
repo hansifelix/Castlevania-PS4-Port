@@ -10,7 +10,7 @@ Depois da Etapa 90-C confirmar a integridade estrutural dos 1.916 objetos, esta 
 - Símbolos ainda sem candidato dentro do inventário AOT;
 - Para cada símbolo indefinido, candidatos definidos em outros módulos AOT, discriminados pelo módulo consumidor.
 
-O parser lê ELF64 little-endian ET_REL x86-64 e mantém os nomes mangled exatos. Ele lê um membro por vez de ZIP/TAR.GZ, sem extrair os objetos para o Drive. Os testes públicos incluem arquivos ZIP e TAR.GZ sintéticos para conferir essa leitura sem extração.
+O parser lê ELF64 little-endian ET_REL x86-64 e mantém os nomes mangled exatos. Ele lê um membro por vez de ZIP/TAR.GZ, sem extrair os objetos para o Drive. Os testes públicos incluem arquivos ZIP e TAR.GZ sintéticos para conferir essa leitura sem extração. O CI executa os cinco testes do inventário de símbolos, além da suíte CTest e da auditoria estrutural anterior, sempre com dados fictícios.
 
 ## Segurança dos dados
 
