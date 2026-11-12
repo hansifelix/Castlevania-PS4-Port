@@ -107,7 +107,7 @@ def classify(name: str) -> str:
 
 
 def build_provider_candidates(all_definitions: dict[str, list[str]], all_undefined: dict[str, set[str]]) -> dict:
-    """Map each consumer module's undefined name to definitions in other AOT modules."""
+    """Map each consuming object location to definitions in other AOT objects."""
     candidates = {}
     for name, consumers in all_undefined.items():
         definitions = sorted(set(all_definitions.get(name, [])))
@@ -217,7 +217,7 @@ def audit(root: Path) -> dict:
                     all_definitions[name].append(f"{module}:{index}")
                 for name in copy["undefined"]:
                     undefined[name] += 1
-                    all_undefined[name].add(module)
+                    all_undefined[name].add(f"{module}:{index}")
         module_results[module] = {
             "expected_indices": expected,
             "indices_found": len(indices),
@@ -240,6 +240,14 @@ def audit(root: Path) -> dict:
         if name not in all_definitions
     }
     provider_candidates = build_provider_candidates(all_definitions, all_undefined)
+    cross_module_provider_names = {
+        name for name, consumers in provider_candidates.items()
+        if any(
+            provider.split(":", 1)[0] != consumer.split(":", 1)[0]
+            for consumer, providers in consumers.items()
+            for provider in providers
+        )
+    }
     return {
         "audit_mode": "READ_ONLY_SYMBOL_TABLE_PARSE_NO_EXTRACT_NO_COMPILE_NO_LINK",
         "root_name": root.name,
@@ -254,7 +262,8 @@ def audit(root: Path) -> dict:
             "unique_undefined_symbols": len(all_undefined),
             "symbols_with_definitions_in_multiple_modules": len(cross_module_candidates),
             "undefined_symbols_without_provider_in_aot_inventory": len(unresolved_in_inventory),
-            "undefined_symbols_with_cross_module_provider_candidates": len(provider_candidates),
+            "undefined_symbols_with_aot_provider_candidates": len(provider_candidates),
+            "undefined_symbols_with_cross_module_provider_candidates": len(cross_module_provider_names),
         },
         "cross_module_definition_candidates": cross_module_candidates,
         "undefined_symbol_provider_candidates": provider_candidates,
