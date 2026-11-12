@@ -44,7 +44,7 @@ extern "C" int __cxa_thread_atexit_impl(
         g_thread_dtor_key_result != 0)
         return -1;
 
-    auto* d = static_cast<KazumaThreadDtor*>(malloc(sizeof(*d)));
+    auto* d = static_cast<KazumaThreadDtor*>(malloc(sizeof(KazumaThreadDtor)));
     if (!d) return -1;
 
     d->func = func;
