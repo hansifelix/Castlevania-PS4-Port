@@ -20,6 +20,25 @@ on:
       - 'tools/link/strict_link_unlimited.py'
       - 'tools/link/compile_full_runtime.py'
       - 'tests/test_compile_full_runtime.py'
+      - 'tools/link/compile_ps4_platform_stack.py'
+      - 'tests/test_compile_ps4_platform_stack.py'
+      - 'tools/link/ps4_platform_stack_gate.py'
+      - 'tests/test_ps4_platform_stack_gate.py'
+      - 'src/ps4/main.cpp'
+      - 'src/ps4/platform_ps4_optional_services.cpp'
+      - 'src/ps4/platform_ps4_thread_name.cpp'
+      - 'src/ps4/platform_ps4_app0_config.cpp'
+      - 'src/ps4/platform_ps4_clock_thread.cpp'
+      - 'src/ps4/platform_ps4_file_io.cpp'
+      - 'src/ps4/platform_ps4_thread_launch.cpp'
+      - 'src/runtime_bridge/linked_modules_castlevania.cpp'
+      - 'tools/etapa50/platform_ps4_memory.cpp'
+      - 'tools/etapa72/platform_ps4_threads_native.cpp'
+      - 'tools/etapa73/platform_ps4_input.cpp'
+      - 'tools/etapa74/platform_ps4_display.cpp'
+      - 'tools/etapa75/platform_ps4_audio.cpp'
+      - 'tools/link/strict_link_no_storage.py'
+      - 'tests/test_strict_link_no_storage.py'
       - 'tests/test_strict_link_unlimited.py'
       - 'tests/test_ps4_nvn_vulkan_closure.py'
       - '.github/workflows/kazuma-ps4-nvn-radv-archive.yml'
@@ -44,6 +63,8 @@ jobs:
           python3 tests/test_ps4_sdk_symbol_provider_audit.py
           python3 tests/test_strict_link_unlimited.py
           python3 tests/test_compile_full_runtime.py
+          python3 tests/test_compile_ps4_platform_stack.py
+          python3 tests/test_ps4_platform_stack_gate.py
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18 git curl ca-certificates
       - name: Fetch pinned real runtime, OpenOrbis and Khronos Vulkan headers
@@ -177,9 +198,18 @@ jobs:
             --out "$RUNNER_TEMP/runtime-objects"
           count="$(find "$RUNNER_TEMP/runtime-objects" -maxdepth 1 -type f -name '*.o' | wc -l)"
           test "$count" -eq 88
+          python3 tools/link/compile_ps4_platform_stack.py \
+            --repository "$GITHUB_WORKSPACE" \
+            --upstream "$KAZUMA_NX_SOURCE" \
+            --sdk "$KAZUMA_SDK" \
+            --compat "$RUNNER_TEMP/compat" \
+            --out "$RUNNER_TEMP/platform-objects"
+          platform_count="$(find "$RUNNER_TEMP/platform-objects" -maxdepth 1 -type f -name '*.o' | wc -l)"
+          test "$platform_count" -eq 12
           ld.lld-18 -m elf_x86_64 -r \
             -o "$RUNNER_TEMP/nvn-gpu/combined.o" \
             "$RUNNER_TEMP/runtime-objects/"*.o \
+            "$RUNNER_TEMP/platform-objects/"*.o \
             "$RUNNER_TEMP/nvn-gpu/gpu-adapters.o" \
             --whole-archive "$KAZUMA_RADV_ARCHIVE" --no-whole-archive \
             "$KAZUMA_ZLIB_ARCHIVE"
@@ -201,7 +231,14 @@ jobs:
             --lib-dir "$KAZUMA_SDK/lib" \
             --nm llvm-nm-18 \
             --timeout 20
-          echo 'KAZUMA_FULL_PUBLIC_RUNTIME_PLUS_NVNVK_RADV=RELOCATABLE_ELF64_ONLY'
+          python3 tools/link/ps4_platform_stack_gate.py \
+            --defined "$RUNNER_TEMP/nvn-gpu/defined.nm" \
+            --undefined "$RUNNER_TEMP/nvn-gpu/undefined.nm"
+          python3 tools/link/boot_runtime_link_gate.py \
+            --defined "$RUNNER_TEMP/nvn-gpu/defined.nm" \
+            --undefined "$RUNNER_TEMP/nvn-gpu/undefined.nm" \
+            --require-file-io --require-clock-thread --require-thread-launch --require-app0
+          echo 'KAZUMA_FULL_PUBLIC_RUNTIME_AND_PS4_PLATFORM=RELOCATABLE_ELF64_ONLY'
           echo 'KAZUMA_PS4_SDK_IMPORT_PROVIDER_AUDIT=COMPLETE_PRESENCE_ONLY_NOT_LINK_RESOLUTION'
           echo 'KAZUMA_GAME_AOT_AND_HARDWARE=NOT_INCLUDED_NOT_TESTED'
       - name: Strict PS4 link diagnostic for the real NVN/RADV slice (no ELF output)
@@ -213,5 +250,11 @@ jobs:
             --object "$RUNNER_TEMP/nvn-gpu/combined.o" \
             --linker ld.lld-18 \
             --timeout 900 \
-            --extra-lib SceGnmDriver
+            --extra-lib SceGnmDriver \
+            --extra-lib SceVideoOut \
+            --extra-lib SceAudioOut \
+            --extra-lib ScePad \
+            --extra-lib SceUserService \
+            --extra-lib SceLibcInternal \
+            --extra-lib ScePosix
       # Only log text; large combined Mesa object remains ephemeral on Actions runner.
