@@ -14,7 +14,7 @@ from tools.link.compile_ps4_platform_stack import (
 class CompilePS4PlatformStackTests(unittest.TestCase):
     def test_manifest_has_fourteen_unique_reviewed_sources(self):
         self.assertEqual(len(PLATFORM_SOURCES), 14)
-        self.assertEqual(len(set(PLATFORM_SOURCES)), 12)
+        self.assertEqual(len(set(PLATFORM_SOURCES)), 14)
         required = {
             "tools/etapa50/platform_ps4_memory.cpp",
             "tools/etapa73/platform_ps4_input.cpp",
