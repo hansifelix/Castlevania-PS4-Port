@@ -1,7 +1,12 @@
+import io
 import struct
+import tarfile
+import tempfile
 import unittest
+import zipfile
+from pathlib import Path
 
-from tools.etapa90.private_aot_symbol_inventory import build_provider_candidates, parse_elf_symbols
+from tools.etapa90.private_aot_symbol_inventory import audit, build_provider_candidates, parse_elf_symbols
 
 
 def tiny_elf64():
@@ -46,6 +51,27 @@ class PrivateAotSymbolInventoryTests(unittest.TestCase):
         self.assertEqual(result["_shared_fn"]["MAIN"], ["SDK:8"])
         self.assertEqual(result["_shared_fn"]["subsdk0"], ["MAIN:4", "SDK:8"])
         self.assertNotIn("_local_only", result)
+
+    def test_audits_zip_and_tar_gz_members_without_extracting(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "private"
+            root.mkdir()
+            elf = tiny_elf64()
+
+            with zipfile.ZipFile(root / "KazumaMAIN.zip", "w") as archive:
+                archive.writestr("objects/code_0000.o", elf)
+
+            tar_path = root / "KazumaSDK.tar.gz"
+            with tarfile.open(tar_path, "w:gz") as archive:
+                info = tarfile.TarInfo("objects/code_0000.o")
+                info.size = len(elf)
+                archive.addfile(info, io.BytesIO(elf))
+
+            result = audit(root)
+            self.assertEqual(result["module_results"]["main"]["object_copies_parsed"], 1)
+            self.assertEqual(result["module_results"]["sdk"]["object_copies_parsed"], 1)
+            self.assertFalse(result["files_extracted"])
+            self.assertEqual(sorted(p.name for p in root.iterdir()), ["KazumaMAIN.zip", "KazumaSDK.tar.gz"])
 
     def test_rejects_non_relocatable_elf(self):
         blob = bytearray(tiny_elf64())
