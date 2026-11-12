@@ -26,6 +26,8 @@ on:
       - 'tests/test_ps4_platform_stack_gate.py'
       - 'tools/link/classify_public_link.py'
       - 'tests/test_classify_public_link.py'
+      - 'tests/test_sysconf_forward.cpp'
+      - 'tests/test_thread_atexit.cpp'
       - 'src/ps4/main.cpp'
       - 'src/ps4/platform_ps4_optional_services.cpp'
       - 'src/ps4/platform_ps4_thread_name.cpp'
@@ -70,6 +72,10 @@ jobs:
           python3 tests/test_compile_ps4_platform_stack.py
           python3 tests/test_ps4_platform_stack_gate.py
           python3 tests/test_classify_public_link.py
+          g++ -std=c++17 -Wall -Wextra -Werror src/ps4/platform_ps4_sysconf.cpp tests/test_sysconf_forward.cpp -o "$RUNNER_TEMP/test_sysconf_forward"
+          "$RUNNER_TEMP/test_sysconf_forward"
+          g++ -std=c++17 -Wall -Wextra -Werror -pthread src/ps4/platform_ps4_thread_atexit.cpp tests/test_thread_atexit.cpp -o "$RUNNER_TEMP/test_thread_atexit"
+          "$RUNNER_TEMP/test_thread_atexit"
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18 git curl ca-certificates
       - name: Fetch pinned real runtime, OpenOrbis and Khronos Vulkan headers
