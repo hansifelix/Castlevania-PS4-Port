@@ -46,6 +46,10 @@ class PrivateAotObjectAuditTests(unittest.TestCase):
         self.assertEqual(module_for(("main_backup_02.zip",)), "main")
         self.assertEqual(module_for(("SDK-objects.zip",)), "sdk")
         self.assertEqual(module_for(("subsdk0.zip",)), "subsdk0")
+        self.assertEqual(module_for(("KazumaMAIN_b308aab38edf_stage.zip",)), "main")
+        self.assertEqual(module_for(("Kazuma_Castlevania_MAIN_1707_backup.zip",)), "main")
+        self.assertEqual(module_for(("Kazuma_Castlevania_SDK_136_CP.zip",)), "sdk")
+        self.assertEqual(module_for(("Kazuma85_subsdk0_0320bad0c5.zip",)), "subsdk0")
         self.assertIsNone(module_for(("unclassified.zip",)))
 
     def test_complete_archive_passes_structure_elf_and_manifest_without_extraction(self):
