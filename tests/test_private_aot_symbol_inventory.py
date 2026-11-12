@@ -44,16 +44,19 @@ class PrivateAotSymbolInventoryTests(unittest.TestCase):
         self.assertIn("_missing_fn", result["undefined"])
         self.assertEqual(result["external_symbol_entries"], 2)
 
-    def test_maps_undefined_symbols_to_other_module_provider_candidates(self):
+    def test_maps_undefined_symbols_to_other_objects_including_same_module(self):
         definitions = {
             "_shared_fn": ["MAIN:4", "SDK:8"],
-            "_local_only": ["MAIN:9"],
+            "_same_module_fn": ["MAIN:9"],
         }
-        undefined = {"_shared_fn": {"MAIN", "subsdk0"}, "_local_only": {"MAIN"}}
+        undefined = {
+            "_shared_fn": {"MAIN:5", "subsdk0:2"},
+            "_same_module_fn": {"MAIN:10"},
+        }
         result = build_provider_candidates(definitions, undefined)
-        self.assertEqual(result["_shared_fn"]["MAIN"], ["SDK:8"])
-        self.assertEqual(result["_shared_fn"]["subsdk0"], ["MAIN:4", "SDK:8"])
-        self.assertNotIn("_local_only", result)
+        self.assertEqual(result["_shared_fn"]["MAIN:5"], ["SDK:8"])
+        self.assertEqual(result["_shared_fn"]["subsdk0:2"], ["MAIN:4", "SDK:8"])
+        self.assertEqual(result["_same_module_fn"]["MAIN:10"], ["MAIN:9"])
 
     def test_audits_zip_and_tar_gz_members_without_extracting(self):
         with tempfile.TemporaryDirectory() as temporary:
