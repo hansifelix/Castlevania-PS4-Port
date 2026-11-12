@@ -19,6 +19,7 @@ struct KazumaThreadDtor {
 
 static pthread_key_t g_thread_dtor_key;
 static pthread_once_t g_thread_dtor_once = PTHREAD_ONCE_INIT;
+static int g_thread_dtor_key_result = -1;
 
 static void kazuma_thread_dtor_run(void* head) {
     KazumaThreadDtor* d = static_cast<KazumaThreadDtor*>(head);
@@ -31,14 +32,16 @@ static void kazuma_thread_dtor_run(void* head) {
 }
 
 static void kazuma_thread_dtor_init() {
-    (void)pthread_key_create(&g_thread_dtor_key, kazuma_thread_dtor_run);
+    g_thread_dtor_key_result = pthread_key_create(
+        &g_thread_dtor_key, kazuma_thread_dtor_run);
 }
 
 extern "C" int __cxa_thread_atexit_impl(
     void (*func)(void*), void* obj, void* dso_handle) {
     (void)dso_handle;
     if (!func) return -1;
-    if (pthread_once(&g_thread_dtor_once, kazuma_thread_dtor_init) != 0)
+    if (pthread_once(&g_thread_dtor_once, kazuma_thread_dtor_init) != 0 ||
+        g_thread_dtor_key_result != 0)
         return -1;
 
     auto* d = static_cast<KazumaThreadDtor*>(malloc(sizeof(*d)));
