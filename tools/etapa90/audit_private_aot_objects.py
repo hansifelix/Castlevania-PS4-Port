@@ -176,6 +176,7 @@ def audit(root: Path) -> dict:
     signature_counts: dict[str, int] = {}
     named_candidates: list[dict] = []
     raw_elf_candidates: list[dict] = []
+    archive_member_inventory: list[dict] = []
 
     def record(module: str | None, name: str, sha: str, head: bytes, source: str):
         match = OBJECT.fullmatch(PurePosixPath(name).name)
@@ -232,6 +233,20 @@ def audit(root: Path) -> dict:
                         if info.is_dir():
                             continue
                         inner = info.filename.replace("\\", "/")
+                        try:
+                            with archive.open(info) as probe_stream:
+                                inner_head = probe_stream.read(64)
+                            inner_signature = identify_signature(inner_head)
+                        except (OSError, RuntimeError, zipfile.BadZipFile):
+                            inner_signature = "UNREADABLE"
+                        if len(archive_member_inventory) < 250:
+                            archive_member_inventory.append({
+                                "archive": rel,
+                                "member": inner,
+                                "size_bytes": info.file_size,
+                                "signature": inner_signature,
+                                "module_hint": module_for(tuple(PurePosixPath(inner).parts)) or module_for(tuple(Path(rel).parts)),
+                            })
                         module = module_for(tuple(PurePosixPath(inner).parts)) or module_for(tuple(Path(rel).parts))
                         if is_manifest(inner):
                             manifests_seen += 1
@@ -370,6 +385,7 @@ def audit(root: Path) -> dict:
             "signatures": dict(sorted(signature_counts.items())),
             "named_candidates_sample_max_150": sorted(named_candidates, key=lambda x: x["path"].lower()),
             "raw_elf_signature_sample_max_150": sorted(raw_elf_candidates, key=lambda x: x["path"].lower()),
+            "archive_member_sample_max_250": sorted(archive_member_inventory, key=lambda x: (x["archive"].lower(), x["member"].lower())),
         },
         "module_results": module_reports,
         "totals": {
