@@ -175,7 +175,7 @@ def audit(root: Path) -> dict:
                                         manifest_entries.setdefault(normalized, set()).add(v)
                                         basename = PurePosixPath(normalized).name
                                         manifest_by_basename.setdefault(basename, set()).add(v)
-                                        manifest_module = module_for(tuple(PurePosixPath(normalized).parts))
+                                        manifest_module = module_for(tuple(PurePosixPath(normalized).parts)) or module
                                         manifest_object = OBJECT.fullmatch(basename)
                                         if manifest_module and manifest_object:
                                             key = (manifest_module, int(manifest_object.group(1)))
@@ -205,7 +205,7 @@ def audit(root: Path) -> dict:
                         manifest_entries.setdefault(normalized, set()).add(v)
                         basename = PurePosixPath(normalized).name
                         manifest_by_basename.setdefault(basename, set()).add(v)
-                        manifest_module = module_for(tuple(PurePosixPath(normalized).parts))
+                        manifest_module = module_for(tuple(PurePosixPath(normalized).parts)) or module_for(tuple(Path(rel).parts))
                         manifest_object = OBJECT.fullmatch(basename)
                         if manifest_module and manifest_object:
                             key = (manifest_module, int(manifest_object.group(1)))
