@@ -92,6 +92,7 @@ def inspect(defined_text: str, undefined_text: str) -> dict:
     undefined = parse_nm(undefined_text, defined=False)
     missing = sorted(name for name in REQUIRED if definitions.get(name, 0) != 1)
     still_undefined = sorted(name for name in REQUIRED if name in undefined)
+    private_unresolved = sorted(name for name in PRIVATE_AOT if name in undefined)
     private_missing = sorted(name for name in PRIVATE_AOT if name not in undefined)
     private_invented = sorted(name for name in PRIVATE_AOT if name in definitions)
     missing_imports = sorted(name for name in REAL_IMPORTS if name not in undefined)
@@ -104,7 +105,8 @@ def inspect(defined_text: str, undefined_text: str) -> dict:
         "required_public_provider_count": len(REQUIRED),
         "public_providers_missing_or_duplicated": missing,
         "public_providers_still_undefined": still_undefined,
-        "private_aot_modules_still_unresolved": private_missing,
+        "private_aot_modules_still_unresolved": private_unresolved,
+        "private_aot_references_missing_from_inventory": private_missing,
         "private_aot_module_definitions_forbidden": private_invented,
         "required_real_sdk_imports_missing": missing_imports,
         "strict_executable_link_passed": False,
