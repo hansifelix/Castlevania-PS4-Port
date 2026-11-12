@@ -238,6 +238,7 @@ jobs:
             --defined "$RUNNER_TEMP/nvn-gpu/defined.nm" \
             --undefined "$RUNNER_TEMP/nvn-gpu/undefined.nm" \
             --require-file-io --require-clock-thread --require-thread-launch --require-app0
+          echo 'KAZUMA_PUBLIC_PLATFORM_PROVIDER_GATE=PASS_AOT_PENDING_REQUIRED'
           echo 'KAZUMA_FULL_PUBLIC_RUNTIME_AND_PS4_PLATFORM=RELOCATABLE_ELF64_ONLY'
           echo 'KAZUMA_PS4_SDK_IMPORT_PROVIDER_AUDIT=COMPLETE_PRESENCE_ONLY_NOT_LINK_RESOLUTION'
           echo 'KAZUMA_GAME_AOT_AND_HARDWARE=NOT_INCLUDED_NOT_TESTED'
