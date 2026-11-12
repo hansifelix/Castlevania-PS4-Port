@@ -115,7 +115,7 @@ def build_provider_candidates(all_definitions: dict[str, list[str]], all_undefin
         for consumer in sorted(consumers):
             providers = [
                 location for location in definitions
-                if location.split(":", 1)[0] != consumer
+                if location != consumer
             ]
             if providers:
                 by_consumer[consumer] = providers
