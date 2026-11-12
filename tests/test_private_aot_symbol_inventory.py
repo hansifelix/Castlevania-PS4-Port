@@ -5,6 +5,9 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tools.etapa90.private_aot_symbol_inventory import audit, build_provider_candidates, parse_elf_symbols
 
