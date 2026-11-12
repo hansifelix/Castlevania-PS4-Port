@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from tools.etapa42.diagnosticar_link import unique_errors
 
 MAX_EXAMPLES = 8
-LIBS = ("-lc++", "-lc", "-lkernel")
+LIBS = ("-lc++", "-lc++abi", "-lunwind", "-lc", "-lkernel")
 EXTRA_LIB_RE = re.compile(r"[A-Za-z0-9_]+\Z")
 
 
