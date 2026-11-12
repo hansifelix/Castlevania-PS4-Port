@@ -27,6 +27,8 @@ on:
       - 'src/ps4/main.cpp'
       - 'src/ps4/platform_ps4_optional_services.cpp'
       - 'src/ps4/platform_ps4_thread_name.cpp'
+      - 'src/ps4/platform_ps4_sysconf.cpp'
+      - 'src/ps4/platform_ps4_thread_atexit.cpp'
       - 'src/ps4/platform_ps4_app0_config.cpp'
       - 'src/ps4/platform_ps4_clock_thread.cpp'
       - 'src/ps4/platform_ps4_file_io.cpp'
@@ -205,7 +207,7 @@ jobs:
             --compat "$RUNNER_TEMP/compat" \
             --out "$RUNNER_TEMP/platform-objects"
           platform_count="$(find "$RUNNER_TEMP/platform-objects" -maxdepth 1 -type f -name '*.o' | wc -l)"
-          test "$platform_count" -eq 12
+          test "$platform_count" -eq 14
           ld.lld-18 -m elf_x86_64 -r \
             -o "$RUNNER_TEMP/nvn-gpu/combined.o" \
             "$RUNNER_TEMP/runtime-objects/"*.o \
