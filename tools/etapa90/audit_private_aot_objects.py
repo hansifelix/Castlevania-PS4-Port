@@ -162,7 +162,7 @@ def audit(root: Path) -> dict:
                         if info.is_dir():
                             continue
                         inner = info.filename.replace("\\", "/")
-                        module = module_for(tuple(Path(rel).parts) + tuple(PurePosixPath(inner).parts))
+                        module = module_for(tuple(PurePosixPath(inner).parts)) or module_for(tuple(Path(rel).parts))
                         if is_manifest(inner):
                             manifests_seen += 1
                             try:
@@ -248,7 +248,8 @@ def audit(root: Path) -> dict:
                 manifest_name = f"code_{index:0{width}d}.o".lower()
                 known = manifest_by_module_index.get((module, index), set())
                 if not known:
-                    known = manifest_by_basename.get(manifest_name, set())
+                    fallback = manifest_by_basename.get(manifest_name, set())
+                    known = fallback if len(fallback) == 1 else set()
                 if item["sha256"] in known:
                     manifest_checked_indices.add(index)
                 elif known:
@@ -306,9 +307,11 @@ def audit(root: Path) -> dict:
         "overall_status": (
             "PASS_STRUCTURE_ELF_AND_MANIFESTS"
             if all_coverage and all_elf_valid and not invalid_objects
+               and not unreadable_archives and not duplicate_archive_names
                and all_manifest_checked >= sum(EXPECTED.values()) and not all_manifest_mismatch
             else "PASS_STRUCTURE_ELF_MANIFESTS_INCOMPLETE"
             if all_coverage and all_elf_valid and not invalid_objects
+               and not unreadable_archives and not duplicate_archive_names
             else "FAIL_OR_INCOMPLETE"
         ),
         "private_source_contents_exported": False,
