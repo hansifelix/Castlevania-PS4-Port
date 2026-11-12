@@ -28,6 +28,8 @@ on:
       - 'tests/test_classify_public_link.py'
       - 'tests/test_sysconf_forward.cpp'
       - 'tests/test_thread_atexit.cpp'
+      - 'tools/etapa90/audit_private_aot_objects.py'
+      - 'tests/test_private_aot_object_audit.py'
       - 'src/ps4/main.cpp'
       - 'src/ps4/platform_ps4_optional_services.cpp'
       - 'src/ps4/platform_ps4_thread_name.cpp'
@@ -72,6 +74,7 @@ jobs:
           python3 tests/test_compile_ps4_platform_stack.py
           python3 tests/test_ps4_platform_stack_gate.py
           python3 tests/test_classify_public_link.py
+          python3 tests/test_private_aot_object_audit.py
           g++ -std=c++17 -Wall -Wextra -Werror src/ps4/platform_ps4_sysconf.cpp tests/test_sysconf_forward.cpp -o "$RUNNER_TEMP/test_sysconf_forward"
           "$RUNNER_TEMP/test_sysconf_forward"
           g++ -std=c++17 -Wall -Wextra -Werror -pthread src/ps4/platform_ps4_thread_atexit.cpp tests/test_thread_atexit.cpp -o "$RUNNER_TEMP/test_thread_atexit"
