@@ -22,6 +22,8 @@ PLATFORM_SOURCES = (
     "src/ps4/platform_ps4_thread_launch.cpp",
     "src/ps4/platform_ps4_thread_name.cpp",
     "src/ps4/platform_ps4_optional_services.cpp",
+    "src/ps4/platform_ps4_sysconf.cpp",
+    "src/ps4/platform_ps4_thread_atexit.cpp",
     "src/runtime_bridge/linked_modules_castlevania.cpp",
     "src/ps4/main.cpp",
 )
@@ -136,9 +138,9 @@ def compile_platform_stack(
             raise RuntimeError(f"Empty PS4 provider object produced for {relative}")
         outputs.append(output)
 
-    if len(outputs) != 12:
-        raise RuntimeError(f"Expected 12 PS4 platform objects, got {len(outputs)}")
-    print("KAZUMA_PS4_PLATFORM_OBJECTS=12_COMPILED_NO_AOT_NO_GAME_ASSETS", flush=True)
+    if len(outputs) != 14:
+        raise RuntimeError(f"Expected 14 PS4 platform objects, got {len(outputs)}")
+    print("KAZUMA_PS4_PLATFORM_OBJECTS=14_COMPILED_NO_AOT_NO_GAME_ASSETS", flush=True)
     return outputs
 
 
