@@ -112,11 +112,14 @@ def safe_report_destination(root: Path, report: Path) -> Path:
 
 
 def audit(root: Path) -> dict:
-    root = root.expanduser().resolve()
-    if not root.is_dir() or root.is_symlink():
-        raise ValueError("--root deve ser uma pasta real")
+    root = root.expanduser()
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("--root deve ser uma pasta real, sem symlink")
+    root = root.resolve()
     objects: dict[str, dict[int, list[dict]]] = {m: {} for m in EXPECTED}
     manifest_entries: dict[str, set[str]] = {}
+    manifest_by_module_index: dict[tuple[str, int], set[str]] = {}
+    manifest_by_basename: dict[str, set[str]] = {}
     archive_count = 0
     archive_members = 0
     manifests_seen = 0
@@ -168,7 +171,15 @@ def audit(root: Path) -> dict:
                                 if parsed:
                                     manifest_files_with_hashes += 1
                                     for k, v in parsed.items():
-                                        manifest_entries.setdefault(PurePosixPath(k).name, set()).add(v)
+                                        normalized = k.lower()
+                                        manifest_entries.setdefault(normalized, set()).add(v)
+                                        basename = PurePosixPath(normalized).name
+                                        manifest_by_basename.setdefault(basename, set()).add(v)
+                                        manifest_module = module_for(tuple(PurePosixPath(normalized).parts))
+                                        manifest_object = OBJECT.fullmatch(basename)
+                                        if manifest_module and manifest_object:
+                                            key = (manifest_module, int(manifest_object.group(1)))
+                                            manifest_by_module_index.setdefault(key, set()).add(v)
                             except (OSError, RuntimeError, zipfile.BadZipFile):
                                 pass
                         if OBJECT.fullmatch(PurePosixPath(inner).name) and module:
@@ -190,7 +201,15 @@ def audit(root: Path) -> dict:
                 if parsed:
                     manifest_files_with_hashes += 1
                     for k, v in parsed.items():
-                        manifest_entries.setdefault(PurePosixPath(k).name, set()).add(v)
+                        normalized = k.lower()
+                        manifest_entries.setdefault(normalized, set()).add(v)
+                        basename = PurePosixPath(normalized).name
+                        manifest_by_basename.setdefault(basename, set()).add(v)
+                        manifest_module = module_for(tuple(PurePosixPath(normalized).parts))
+                        manifest_object = OBJECT.fullmatch(basename)
+                        if manifest_module and manifest_object:
+                            key = (manifest_module, int(manifest_object.group(1)))
+                            manifest_by_module_index.setdefault(key, set()).add(v)
             except OSError:
                 pass
         module = module_for(tuple(Path(rel).parts))
@@ -217,7 +236,7 @@ def audit(root: Path) -> dict:
         unexpected = sorted(i for i in indices if i < 0 or i >= expected_count)
         conflicts = []
         replicas = 0
-        manifest_checked = 0
+        manifest_checked_indices = set()
         for index, copies in sorted(indices.items()):
             hashes = {item["sha256"] for item in copies}
             if len(hashes) > 1:
@@ -225,9 +244,13 @@ def audit(root: Path) -> dict:
             else:
                 replicas += max(0, len(copies) - 1)
             for item in copies:
-                known = manifest_entries.get(f"code_{index:03d}.o", set()) | manifest_entries.get(f"code_{index:04d}.o", set())
+                width = 4 if module == "main" else 3
+                manifest_name = f"code_{index:0{width}d}.o".lower()
+                known = manifest_by_module_index.get((module, index), set())
+                if not known:
+                    known = manifest_by_basename.get(manifest_name, set())
                 if item["sha256"] in known:
-                    manifest_checked += 1
+                    manifest_checked_indices.add(index)
                 elif known:
                     all_manifest_mismatch.append({"module": module, "index": index, "source": item["source"]})
         valid_count = sum(
@@ -242,7 +265,7 @@ def audit(root: Path) -> dict:
         total_objects += sum(len(c) for c in indices.values())
         total_replicas += replicas
         total_conflicts += len(conflicts)
-        all_manifest_checked += manifest_checked
+        all_manifest_checked += len(manifest_checked_indices)
         module_reports[module] = {
             "expected_indices": f"000..{expected_count-1:0{4 if module == 'main' else 3}d}",
             "unique_indices_found": unique_count,
@@ -253,7 +276,7 @@ def audit(root: Path) -> dict:
             "conflicting_hash_indices": conflicts,
             "elf64_et_rel_x86_64_valid_copies": valid_count,
             "elf_invalid": not elf_valid,
-            "manifest_hash_matches": manifest_checked,
+            "manifest_hash_matches_unique_indices": len(manifest_checked_indices),
             "coverage_complete": coverage,
         }
 
