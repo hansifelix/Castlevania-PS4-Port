@@ -100,3 +100,6 @@ O workflow público executa testes apenas com ELF sintético. Isso valida o audi
 ## Próxima ação
 
 Executar a auditoria privada antes de qualquer compilação ou link. Preservar todos os backups originais. Só depois de resolver eventuais conflitos e obter um relatório completo planejar a integração dos objetos já existentes com a toolchain OpenOrbis.
+
+
+Notebook Colab pronto para executar esta etapa na mesma conta Google do projeto: `notebooks/Auditoria_Leitura_AOT_Etapa90B_Colab.ipynb`. Ele monta o Drive, procura `Kazuma_Traducoes_AOT_Privado`, executa o auditor e cria um JSON novo sem sobrescrever relatórios anteriores. Compartilhar somente esse JSON de metadados; não enviar objetos nem fontes AOT.
