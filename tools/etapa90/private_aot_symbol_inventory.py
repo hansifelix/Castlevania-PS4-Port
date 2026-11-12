@@ -102,6 +102,24 @@ def classify(name: str) -> str:
     return "c_or_other"
 
 
+def build_provider_candidates(all_definitions: dict[str, list[str]], all_undefined: dict[str, set[str]]) -> dict:
+    """Map each consumer module's undefined name to definitions in other AOT modules."""
+    candidates = {}
+    for name, consumers in all_undefined.items():
+        definitions = sorted(set(all_definitions.get(name, [])))
+        by_consumer = {}
+        for consumer in sorted(consumers):
+            providers = [
+                location for location in definitions
+                if location.split(":", 1)[0] != consumer
+            ]
+            if providers:
+                by_consumer[consumer] = providers
+        if by_consumer:
+            candidates[name] = by_consumer
+    return candidates
+
+
 def audit(root: Path) -> dict:
     root = root.expanduser()
     if root.is_symlink() or not root.is_dir():
@@ -217,6 +235,7 @@ def audit(root: Path) -> dict:
         for name, modules in all_undefined.items()
         if name not in all_definitions
     }
+    provider_candidates = build_provider_candidates(all_definitions, all_undefined)
     return {
         "audit_mode": "READ_ONLY_SYMBOL_TABLE_PARSE_NO_EXTRACT_NO_COMPILE_NO_LINK",
         "root_name": root.name,
@@ -231,8 +250,10 @@ def audit(root: Path) -> dict:
             "unique_undefined_symbols": len(all_undefined),
             "symbols_with_definitions_in_multiple_modules": len(cross_module_candidates),
             "undefined_symbols_without_provider_in_aot_inventory": len(unresolved_in_inventory),
+            "undefined_symbols_with_cross_module_provider_candidates": len(provider_candidates),
         },
         "cross_module_definition_candidates": cross_module_candidates,
+        "undefined_symbol_provider_candidates": provider_candidates,
         "undefined_without_aot_provider": unresolved_in_inventory,
         "invalid_objects": invalid,
         "index_coverage_complete": all(not x["missing_indices"] and not x["unexpected_indices"] for x in module_results.values()),
