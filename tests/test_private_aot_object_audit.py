@@ -127,10 +127,10 @@ class PrivateAotObjectAuditTests(unittest.TestCase):
             self.assertEqual(report["totals"]["object_copies_found"], 0)
 
     def test_identifies_common_archive_and_document_signatures(self):
-        self.assertEqual(identify_signature(b"PK\\x03\\x04rest"), "ZIP")
-        self.assertEqual(identify_signature(b"7z\\xbc\\xaf\\x27\\x1c"), "7Z")
-        self.assertEqual(identify_signature(b"Rar!\\x1a\\x07"), "RAR")
-        self.assertEqual(identify_signature(b"\\x7fELF" + bytes(60)), "ELF")
+        self.assertEqual(identify_signature(b"PK\x03\x04rest"), "ZIP")
+        self.assertEqual(identify_signature(b"7z\xbc\xaf\x27\x1c"), "7Z")
+        self.assertEqual(identify_signature(b"Rar!\x1a\x07"), "RAR")
+        self.assertEqual(identify_signature(b"\x7fELF" + bytes(60)), "ELF")
 
 
 if __name__ == "__main__":
