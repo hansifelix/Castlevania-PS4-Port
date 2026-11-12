@@ -7,7 +7,7 @@ import tempfile
 import unittest
 import zipfile
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools.etapa90.audit_private_aot_objects import (
     EXPECTED,
     audit,
