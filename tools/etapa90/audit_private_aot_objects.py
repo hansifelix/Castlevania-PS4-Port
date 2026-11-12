@@ -80,19 +80,19 @@ def elf64_rel_x86_64(header: bytes) -> tuple[bool, str]:
 
 def identify_signature(head: bytes) -> str:
     """Classify common file signatures without opening/extracting containers."""
-    if head.startswith(b"\\x7fELF"):
+    if head.startswith(b"\x7fELF"):
         return "ELF"
-    if head.startswith((b"PK\\x03\\x04", b"PK\\x05\\x06", b"PK\\x07\\x08")):
+    if head.startswith((b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08")):
         return "ZIP"
-    if head.startswith(b"7z\\xbc\\xaf\\x27\\x1c"):
+    if head.startswith(b"7z\xbc\xaf\x27\x1c"):
         return "7Z"
-    if head.startswith(b"Rar!\\x1a\\x07"):
+    if head.startswith(b"Rar!\x1a\x07"):
         return "RAR"
-    if head.startswith(b"\\x1f\\x8b"):
+    if head.startswith(b"\x1f\x8b"):
         return "GZIP"
     if head.startswith(b"%PDF"):
         return "PDF"
-    if head.startswith(b"SQLite format 3\\x00"):
+    if head.startswith(b"SQLite format 3\x00"):
         return "SQLITE"
     stripped = head.lstrip()
     if stripped.startswith((b"{", b"[")):
@@ -208,7 +208,7 @@ def audit(root: Path) -> dict:
             probe_head = b""
             signature = "UNREADABLE"
         signature_counts[signature] = signature_counts.get(signature, 0) + 1
-        candidate_pattern = re.compile(r"(main|sdk|subsdk0|code[_-]?\\d+|object|\\belf\\b|aot|backup|resgat|etapa)", re.IGNORECASE)
+        candidate_pattern = re.compile(r"(main|sdk|subsdk0|code[_-]?\d+|object|\belf\b|aot|backup|resgat|etapa)", re.IGNORECASE)
         candidate = {
             "path": rel,
             "size_bytes": path.stat().st_size,
