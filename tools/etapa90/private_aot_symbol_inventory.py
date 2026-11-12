@@ -15,8 +15,12 @@ import json
 from pathlib import Path, PurePosixPath
 import re
 import struct
+import sys
 import tarfile
 import zipfile
+
+# Allow both direct script execution and unittest invocation from tests/.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from tools.etapa90.audit_private_aot_objects import EXPECTED, OBJECT, module_for
 
