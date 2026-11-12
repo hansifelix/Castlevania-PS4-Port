@@ -24,10 +24,14 @@ SHA_LINE = re.compile(r"^\s*([0-9a-fA-F]{64})\s+[* ]?(.+?)\s*$")
 
 
 def module_for(parts: tuple[str, ...]) -> str | None:
-    found = {p.lower() for p in parts} & set(EXPECTED)
-    if len(found) == 1:
-        return next(iter(found))
-    return None
+    found = set()
+    for part in parts:
+        token = PurePosixPath(part).name.lower()
+        token = re.sub(r"\\.(zip|7z|tar|tgz|gz)$", "", token)
+        for module in EXPECTED:
+            if token == module or token.startswith(module + "_") or token.startswith(module + "-"):
+                found.add(module)
+    return next(iter(found)) if len(found) == 1 else None
 
 
 def elf64_rel_x86_64(header: bytes) -> tuple[bool, str]:
