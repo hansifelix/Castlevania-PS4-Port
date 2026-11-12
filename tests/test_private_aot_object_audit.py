@@ -12,6 +12,7 @@ from tools.etapa90.audit_private_aot_objects import (
     EXPECTED,
     audit,
     elf64_rel_x86_64,
+    identify_signature,
     module_for,
     safe_report_destination,
 )
@@ -113,6 +114,23 @@ class PrivateAotObjectAuditTests(unittest.TestCase):
             root.mkdir()
             with self.assertRaises(ValueError):
                 safe_report_destination(root, root / "report.json")
+
+    def test_inventory_finds_raw_elf_by_signature_even_without_code_filename(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "private"
+            root.mkdir()
+            (root / "KazumaMAIN_backup_1707.bin").write_bytes(elf_header())
+            report = audit(root)
+            inventory = report["loose_file_inventory"]
+            self.assertEqual(inventory["signatures"]["ELF"], 1)
+            self.assertEqual(len(inventory["raw_elf_signature_sample_max_150"]), 1)
+            self.assertEqual(report["totals"]["object_copies_found"], 0)
+
+    def test_identifies_common_archive_and_document_signatures(self):
+        self.assertEqual(identify_signature(b"PK\\x03\\x04rest"), "ZIP")
+        self.assertEqual(identify_signature(b"7z\\xbc\\xaf\\x27\\x1c"), "7Z")
+        self.assertEqual(identify_signature(b"Rar!\\x1a\\x07"), "RAR")
+        self.assertEqual(identify_signature(b"\\x7fELF" + bytes(60)), "ELF")
 
 
 if __name__ == "__main__":
