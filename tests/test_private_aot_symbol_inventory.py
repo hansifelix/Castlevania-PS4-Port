@@ -1,7 +1,7 @@
 import struct
 import unittest
 
-from tools.etapa90.private_aot_symbol_inventory import parse_elf_symbols
+from tools.etapa90.private_aot_symbol_inventory import build_provider_candidates, parse_elf_symbols
 
 
 def tiny_elf64():
@@ -35,6 +35,17 @@ class PrivateAotSymbolInventoryTests(unittest.TestCase):
         self.assertIn("_defined_fn", result["defined"])
         self.assertIn("_missing_fn", result["undefined"])
         self.assertEqual(result["external_symbol_entries"], 2)
+
+    def test_maps_undefined_symbols_to_other_module_provider_candidates(self):
+        definitions = {
+            "_shared_fn": ["MAIN:4", "SDK:8"],
+            "_local_only": ["MAIN:9"],
+        }
+        undefined = {"_shared_fn": {"MAIN", "subsdk0"}, "_local_only": {"MAIN"}}
+        result = build_provider_candidates(definitions, undefined)
+        self.assertEqual(result["_shared_fn"]["MAIN"], ["SDK:8"])
+        self.assertEqual(result["_shared_fn"]["subsdk0"], ["MAIN:4", "SDK:8"])
+        self.assertNotIn("_local_only", result)
 
     def test_rejects_non_relocatable_elf(self):
         blob = bytearray(tiny_elf64())
