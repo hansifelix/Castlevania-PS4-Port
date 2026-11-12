@@ -78,6 +78,28 @@ def elf64_rel_x86_64(header: bytes) -> tuple[bool, str]:
     return True, "ELF64_ET_REL_x86_64"
 
 
+def identify_signature(head: bytes) -> str:
+    """Classify common file signatures without opening/extracting containers."""
+    if head.startswith(b"\\x7fELF"):
+        return "ELF"
+    if head.startswith((b"PK\\x03\\x04", b"PK\\x05\\x06", b"PK\\x07\\x08")):
+        return "ZIP"
+    if head.startswith(b"7z\\xbc\\xaf\\x27\\x1c"):
+        return "7Z"
+    if head.startswith(b"Rar!\\x1a\\x07"):
+        return "RAR"
+    if head.startswith(b"\\x1f\\x8b"):
+        return "GZIP"
+    if head.startswith(b"%PDF"):
+        return "PDF"
+    if head.startswith(b"SQLite format 3\\x00"):
+        return "SQLITE"
+    stripped = head.lstrip()
+    if stripped.startswith((b"{", b"[")):
+        return "JSON_OR_TEXT"
+    return "OTHER"
+
+
 def digest_stream(stream) -> tuple[str, bytes]:
     h = hashlib.sha256()
     head = stream.read(64)
@@ -150,6 +172,10 @@ def audit(root: Path) -> dict:
     invalid_objects = []
     unreadable_archives = []
     duplicate_archive_names = []
+    extension_counts: dict[str, int] = {}
+    signature_counts: dict[str, int] = {}
+    named_candidates: list[dict] = []
+    raw_elf_candidates: list[dict] = []
 
     def record(module: str | None, name: str, sha: str, head: bytes, source: str):
         match = OBJECT.fullmatch(PurePosixPath(name).name)
@@ -172,6 +198,28 @@ def audit(root: Path) -> dict:
         if path.is_symlink() or not path.is_file():
             continue
         rel = path.relative_to(root).as_posix()
+        suffix = path.suffix.lower() or "[sem extensão]"
+        extension_counts[suffix] = extension_counts.get(suffix, 0) + 1
+        try:
+            with path.open("rb") as probe:
+                probe_head = probe.read(64)
+            signature = identify_signature(probe_head)
+        except OSError:
+            probe_head = b""
+            signature = "UNREADABLE"
+        signature_counts[signature] = signature_counts.get(signature, 0) + 1
+        candidate_pattern = re.compile(r"(main|sdk|subsdk0|code[_-]?\\d+|object|\\belf\\b|aot|backup|resgat|etapa)", re.IGNORECASE)
+        candidate = {
+            "path": rel,
+            "size_bytes": path.stat().st_size,
+            "extension": suffix,
+            "signature": signature,
+            "module_hint": module_for(tuple(Path(rel).parts)),
+        }
+        if candidate_pattern.search(path.name) and len(named_candidates) < 150:
+            named_candidates.append(candidate)
+        if signature == "ELF" and len(raw_elf_candidates) < 150:
+            raw_elf_candidates.append(candidate)
         if zipfile.is_zipfile(path):
             archive_count += 1
             try:
@@ -316,6 +364,13 @@ def audit(root: Path) -> dict:
         "duplicate_member_names_in_archives": duplicate_archive_names,
         "unreadable_archives": unreadable_archives,
         "invalid_objects": invalid_objects,
+        "loose_file_inventory": {
+            "total_files": loose_files,
+            "extensions": dict(sorted(extension_counts.items())),
+            "signatures": dict(sorted(signature_counts.items())),
+            "named_candidates_sample_max_150": sorted(named_candidates, key=lambda x: x["path"].lower()),
+            "raw_elf_signature_sample_max_150": sorted(raw_elf_candidates, key=lambda x: x["path"].lower()),
+        },
         "module_results": module_reports,
         "totals": {
             "expected_unique_object_indices": sum(EXPECTED.values()),
