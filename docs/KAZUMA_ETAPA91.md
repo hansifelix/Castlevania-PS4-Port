@@ -7,7 +7,8 @@ Depois da Etapa 90-C confirmar a integridade estrutural dos 1.916 objetos, esta 
 - Símbolos globais/weak definidos por cada objeto;
 - Símbolos globais/weak indefinidos que cada objeto requer;
 - Nomes com candidatos de definição em outros módulos AOT;
-- Símbolos ainda sem candidato dentro do inventário AOT.
+- Símbolos ainda sem candidato dentro do inventário AOT;
+- Para cada símbolo indefinido, candidatos definidos em outros módulos AOT, discriminados pelo módulo consumidor.
 
 O parser lê ELF64 little-endian ET_REL x86-64 e mantém os nomes mangled exatos. Ele lê um membro por vez de ZIP/TAR.GZ, sem extrair os objetos para o Drive.
 
@@ -31,7 +32,8 @@ O caminho de `--report` deve ficar fora da pasta auditada. O resumo impresso no 
 
 ## Como interpretar
 
-- `cross_module_definition_candidates`: símbolos para os quais há definições em mais de um módulo AOT. São candidatos, não prova de resolução correta.
+- `undefined_symbol_provider_candidates`: para cada módulo consumidor, lista definições do mesmo nome encontradas em outros módulos AOT. São candidatos, não prova de resolução correta.
+- `cross_module_definition_candidates`: símbolos para os quais há definições em mais de um módulo AOT.
 - `undefined_without_aot_provider`: nomes indefinidos que não aparecem como definição no inventário AOT.
 - `multiply_defined_symbols_within_module`: nomes definidos em mais de um objeto do mesmo módulo, úteis para investigar colisões.
 - `invalid_objects`: objetos cujas tabelas ELF não puderam ser analisadas.
