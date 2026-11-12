@@ -33,7 +33,7 @@ def module_for(parts: tuple[str, ...]) -> str | None:
     found = set()
     for part in parts:
         token = PurePosixPath(part).name.lower()
-        token = re.sub(r"\\.(zip|7z|tar|tgz|gz|rar)$", "", token)
+        token = re.sub(r"\.(zip|7z|tar|tgz|gz|rar)$", "", token)
         compact = re.sub(r"[^a-z0-9]", "", token)
         # Check the more specific subsdk0 marker before generic SDK hints.
         if "subsdk0" in compact:
