@@ -58,3 +58,45 @@ na categoria dos seis símbolos originais, sem dados de jogo.
 
 **Status:** nem eboot nem PKG de Castlevania. Nenhum resultado privado real foi
 obtido com este instrumento até que `need.nm` seja inspecionado.
+
+
+---
+
+# Etapa 90-B — auditoria somente-leitura da integridade dos backups AOT (12/11/2026)
+
+A auditoria de inventário de 11/11 encontrou 381 arquivos relevantes, 4.437 membros compactados e 339 arquivos em `Kazuma_Traducoes_AOT_Privado`. A cobertura nominal reportada foi de 1.707 objetos MAIN (0000–1706), 136 SDK (000–135) e 73 subsdk0 (000–072), totalizando 1.916. O inventário não tinha lacunas nem índices duplicados; ainda faltava verificar cada cabeçalho ELF e confrontar os manifests.
+
+## Ferramenta nova
+
+`tools/etapa90/audit_private_aot_objects.py` faz leitura somente-leitura de arquivos soltos e membros ZIP, sem extrair nada. Para cada `code_NNN.o`:
+
+- Calcula SHA-256;
+- Valida ELF64 little-endian, ET_REL e x86-64;
+- Reconhece os intervalos de índices de MAIN, SDK e subsdk0;
+- Conta réplicas idênticas de backup separadamente de conflitos de hash;
+- Confronta manifests JSON e SHA256SUMS legíveis por módulo/índice;
+- Detecta nomes de membros ZIP duplicados e arquivos compactados ilegíveis.
+
+Não compila, não liga, não move, não apaga, não renomeia e não publica conteúdo comercial. O relatório contém somente metadados, hashes e caminhos relativos.
+
+## Execução privada
+
+```sh
+python3 tools/etapa90/audit_private_aot_objects.py \
+  --root "/caminho/privado/Kazuma_Traducoes_AOT_Privado" \
+  --report "/caminho/privado/fora-da-pasta-auditada/RELATORIO_ETAPA90B.json"
+```
+
+O relatório deve ficar fora da pasta de entrada. A ferramenta não extrai arquivos ZIP. Se os manifests estiverem em formato não reconhecido ou não cobrirem os 1.916 índices únicos, o resultado será `PASS_STRUCTURE_ELF_MANIFESTS_INCOMPLETE`, nunca integridade completa.
+
+## Estados
+
+- `PASS_STRUCTURE_ELF_AND_MANIFESTS`: todos os índices presentes, todas as cópias ELF64 ET_REL x86-64 e hashes dos 1.916 índices únicos confirmados em manifests legíveis.
+- `PASS_STRUCTURE_ELF_MANIFESTS_INCOMPLETE`: cobertura e cabeçalhos ELF aprovados, mas manifests incompletos/não reconhecidos.
+- `FAIL_OR_INCOMPLETE`: lacunas, índices fora da faixa, conflitos de hash, ELF/arquitetura incorretos ou arquivos compactados ilegíveis.
+
+O workflow público executa testes apenas com ELF sintético. Isso valida o auditor, não a integridade dos arquivos privados. O resultado real depende de rodar a ferramenta sobre a pasta privada.
+
+## Próxima ação
+
+Executar a auditoria privada antes de qualquer compilação ou link. Preservar todos os backups originais. Só depois de resolver eventuais conflitos e obter um relatório completo planejar a integração dos objetos já existentes com a toolchain OpenOrbis.
