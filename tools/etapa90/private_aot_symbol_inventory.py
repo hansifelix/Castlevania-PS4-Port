@@ -373,9 +373,14 @@ def audit(root: Path) -> dict:
         for index, copies in indices.items():
             for copy in copies:
                 total_objects += 1
+                location = f"{module}:{index}"
                 for name, bindings in copy["defined"].items():
                     defined[name] += 1
-                    all_definitions[name].append(f"{module}:{index}")
+                    all_definitions[name].append(location)
+                # Carry parser metadata into the aggregate; otherwise duplicate
+                # profiles would silently contain zero metadata entries.
+                for name, details in copy["defined_details"].items():
+                    all_definition_metadata[name][location].extend(details)
                 for name in copy["undefined"]:
                     undefined[name] += 1
                     all_undefined[name].add(f"{module}:{index}")
