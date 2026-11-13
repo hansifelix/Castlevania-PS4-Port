@@ -1,4 +1,5 @@
 import io
+from contextlib import redirect_stdout
 import struct
 import tarfile
 import tempfile
@@ -12,7 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools.etapa90.private_aot_symbol_inventory import (
     audit, build_provider_candidates, duplicate_metadata_is_complete,
     inventory_is_complete, parse_elf_symbols, summarize_duplicate_definitions,
-    summarize_provider_candidates,
+    summarize_provider_candidates, main,
 )
 
 
@@ -209,6 +210,25 @@ class PrivateAotSymbolInventoryTests(unittest.TestCase):
             "invalid_objects": [{"reason": "bad"}],
         }))
 
+    def test_existing_report_is_preserved_and_new_version_is_written(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "private"
+            root.mkdir()
+            with zipfile.ZipFile(root / "KazumaMAIN.zip", "w") as archive:
+                archive.writestr("objects/code_0000.o", tiny_elf64())
+            report = Path(temporary) / "RELATORIO_ETAPA92_BINDINGS_COMDAT_PRIVADO.json"
+            report.write_text("historico-invalido", encoding="utf-8")
+            output = io.StringIO()
+            with unittest.mock.patch.object(sys, "argv", [
+                "private_aot_symbol_inventory.py", "--root", str(root), "--report", str(report)
+            ]), redirect_stdout(output):
+                exit_code = main()
+            self.assertEqual(exit_code, 1)  # partial synthetic inventory must fail closed
+            self.assertEqual(report.read_text(encoding="utf-8"), "historico-invalido")
+            versioned = report.with_name("RELATORIO_ETAPA92_BINDINGS_COMDAT_PRIVADO_v2.json")
+            self.assertTrue(versioned.is_file())
+            summary = json.loads(output.getvalue())
+            self.assertEqual(summary["report_path"], str(versioned))
     def test_rejects_non_relocatable_elf(self):
         blob = bytearray(tiny_elf64())
         struct.pack_into("<H", blob, 16, 2)

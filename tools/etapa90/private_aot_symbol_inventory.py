@@ -493,6 +493,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Private read-only AOT ELF symbol inventory")
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True, help="Private JSON path outside the audited tree")
+    parser.add_argument("--overwrite-report", action="store_true", help="Explicitly replace an existing report")
     args = parser.parse_args()
     result = audit(args.root)
     report = json.dumps(result, ensure_ascii=True, indent=2) + "\n"
@@ -500,6 +501,15 @@ def main() -> int:
     root = args.root.expanduser().resolve()
     if destination.is_symlink() or destination.parent.resolve() == root or root in destination.parent.resolve().parents:
         parser.error("--report must be outside the private input tree and not a symlink")
+    if destination.exists() and not args.overwrite_report:
+        base = destination
+        version = 2
+        while True:
+            candidate = base.with_name(f"{base.stem}_v{version}{base.suffix}")
+            if not candidate.exists() and not candidate.is_symlink():
+                destination = candidate
+                break
+            version += 1
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(report, encoding="utf-8")
     complete = inventory_is_complete(result)
