@@ -9,33 +9,49 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from tools.etapa90.private_aot_symbol_inventory import audit, build_provider_candidates, parse_elf_symbols, summarize_provider_candidates
+from tools.etapa90.private_aot_symbol_inventory import (
+    audit, build_provider_candidates, parse_elf_symbols,
+    summarize_duplicate_definitions, summarize_provider_candidates,
+)
 
 
-def tiny_elf64():
+def tiny_elf64(comdat=False):
     strings = b"\0_defined_fn\0_missing_fn\0"
     names = {"_defined_fn": 1, "_missing_fn": 13}
     symbols = b"".join([
         bytes(24),
-        struct.pack("<IBBHQQ", names["_defined_fn"], 0x10, 0, 1, 0, 0),
-        struct.pack("<IBBHQQ", names["_missing_fn"], 0x10, 0, 0, 0, 0),
+        struct.pack("<IBBHQQ", names["_defined_fn"], 0x12, 0, 4, 0, 1),
+        struct.pack("<IBBHQQ", names["_missing_fn"], 0x12, 0, 0, 0, 0),
     ])
-    shstr = b"\0.strtab\0.symtab\0.shstrtab\0"
-    shnames = {".strtab": 1, ".symtab": 9, ".shstrtab": 17}
+    shstr = b"\0.strtab\0.symtab\0.shstrtab\0.text\0.group\0"
+    shnames = {name: shstr.index(name.encode()) for name in (".strtab", ".symtab", ".shstrtab", ".text", ".group")}
+    section_count = 6 if comdat else 5
     shoff = 64
-    str_off = shoff + 4 * 64
+    data_off = shoff + section_count * 64
+    str_off = data_off
     sym_off = str_off + len(strings)
     shstr_off = sym_off + len(symbols)
+    text_off = shstr_off + len(shstr)
+    group_data = struct.pack("<II", 1, 4) if comdat else b""
+    group_off = text_off + 1
     sections = [
         bytes(64),
         struct.pack("<IIQQQQIIQQ", shnames[".strtab"], 3, 0, 0, str_off, len(strings), 0, 0, 1, 0),
-        struct.pack("<IIQQQQIIQQ", shnames[".symtab"], 2, 0, 0, sym_off, len(symbols), 1, 0, 8, 24),
+        struct.pack("<IIQQQQIIQQ", shnames[".symtab"], 2, 0, 0, sym_off, len(symbols), 1, 1, 8, 24),
         struct.pack("<IIQQQQIIQQ", shnames[".shstrtab"], 3, 0, 0, shstr_off, len(shstr), 0, 0, 1, 0),
+        struct.pack("<IIQQQQIIQQ", shnames[".text"], 1, 6, 0, text_off, 1, 0, 0, 1, 0),
     ]
+    if comdat:
+        sections.append(struct.pack(
+            "<IIQQQQIIQQ", shnames[".group"], 17, 0, 0, group_off,
+            len(group_data), 2, 1, 4, 4
+        ))
     ident = b"\x7fELF" + bytes([2, 1, 1]) + bytes(9)
-    header = struct.pack("<16sHHIQQQIHHHHHH", ident, 1, 62, 1, 0, 0, shoff, 0, 64, 0, 0, 64, 4, 3)
-    return header + b"".join(sections) + strings + symbols + shstr
-
+    header = struct.pack(
+        "<16sHHIQQQIHHHHHH", ident, 1, 62, 1, 0, 0, shoff, 0, 64, 0, 0,
+        64, section_count, 3
+    )
+    return header + b"".join(sections) + strings + symbols + shstr + b"\xc3" + group_data
 
 class PrivateAotSymbolInventoryTests(unittest.TestCase):
     def test_reads_global_defined_and_undefined_symbols_by_exact_name(self):
@@ -43,6 +59,46 @@ class PrivateAotSymbolInventoryTests(unittest.TestCase):
         self.assertIn("_defined_fn", result["defined"])
         self.assertIn("_missing_fn", result["undefined"])
         self.assertEqual(result["external_symbol_entries"], 2)
+
+    def test_parses_binding_type_visibility_and_comdat_membership(self):
+        ordinary = parse_elf_symbols(tiny_elf64())
+        detail = ordinary["defined_details"]["_defined_fn"][0]
+        self.assertEqual(detail["binding"], "GLOBAL")
+        self.assertEqual(detail["type"], "FUNC")
+        self.assertEqual(detail["visibility"], "DEFAULT")
+        self.assertFalse(detail["comdat"])
+
+        grouped = parse_elf_symbols(tiny_elf64(comdat=True))
+        self.assertTrue(grouped["defined_details"]["_defined_fn"][0]["comdat"])
+
+    def test_summarizes_duplicate_definition_binding_and_comdat_profiles(self):
+        global_func = {
+            "binding": "GLOBAL", "type": "FUNC", "visibility": "DEFAULT",
+            "section_index": 4, "comdat": True,
+        }
+        weak_func = {
+            "binding": "WEAK", "type": "FUNC", "visibility": "DEFAULT",
+            "section_index": 4, "comdat": True,
+        }
+        strong_non_comdat = {
+            "binding": "GLOBAL", "type": "FUNC", "visibility": "DEFAULT",
+            "section_index": 5, "comdat": False,
+        }
+        profiles, totals = summarize_duplicate_definitions(
+            {"_duplicated": ["MAIN:0", "SDK:4", "subsdk0:2"]},
+            {"_duplicated": {
+                "MAIN:0": [global_func],
+                "SDK:4": [weak_func],
+                "subsdk0:2": [strong_non_comdat],
+            }},
+        )
+        self.assertEqual(profiles["_duplicated"]["location_count"], 3)
+        self.assertFalse(profiles["_duplicated"]["all_locations_comdat"])
+        self.assertEqual(profiles["_duplicated"]["non_comdat_global_modules"], ["subsdk0"])
+        self.assertEqual(totals["duplicate_definition_symbol_names"], 1)
+        self.assertEqual(totals["duplicate_definition_locations_with_comdat"], 2)
+        self.assertEqual(totals["duplicate_definition_locations_without_comdat"], 1)
+        self.assertEqual(totals["duplicate_definition_binding_entry_counts"], {"GLOBAL": 2, "WEAK": 1})
 
     def test_maps_undefined_symbols_to_other_objects_including_same_module(self):
         definitions = {
