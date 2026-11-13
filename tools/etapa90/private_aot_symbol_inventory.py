@@ -414,6 +414,7 @@ def audit(root: Path) -> dict:
     duplicate_definition_profiles, duplicate_definition_stats = summarize_duplicate_definitions(
         all_definitions, all_definition_metadata
     )
+    duplicate_metadata_complete = duplicate_metadata_is_complete(duplicate_definition_profiles)
     cross_module_provider_names = {
         name for name, consumers in provider_candidates.items()
         if any(
@@ -443,6 +444,7 @@ def audit(root: Path) -> dict:
         },
         "cross_module_definition_candidates": cross_module_candidates,
         "duplicate_definition_profiles": duplicate_definition_profiles,
+        "duplicate_metadata_complete": duplicate_metadata_complete,
         "undefined_symbol_provider_candidates": provider_candidates,
         "undefined_without_aot_provider": unresolved_in_inventory,
         "invalid_objects": invalid,
@@ -465,9 +467,26 @@ def audit(root: Path) -> dict:
     }
 
 
+def duplicate_metadata_is_complete(profiles: dict) -> bool:
+    """Require binding/type/visibility metadata for every duplicate definition location."""
+    for profile in profiles.values():
+        locations = profile.get("locations")
+        if not isinstance(locations, list):
+            return False
+        for location in locations:
+            if not isinstance(location, dict):
+                return False
+            if (not location.get("metadata_entries") or not location.get("bindings")
+                    or not location.get("types") or not location.get("visibilities")):
+                return False
+    return True
+
+
 def inventory_is_complete(result: dict) -> bool:
-    """Fail closed unless every expected object index appears exactly once and parses."""
-    return bool(result.get("index_coverage_complete")) and not result.get("invalid_objects")
+    """Fail closed unless object coverage, duplicate metadata, and ELF parsing are complete."""
+    return (bool(result.get("index_coverage_complete"))
+            and bool(result.get("duplicate_metadata_complete"))
+            and not result.get("invalid_objects"))
 
 
 def main() -> int:
@@ -487,6 +506,7 @@ def main() -> int:
     print(json.dumps({
         "status": "SYMBOL_INVENTORY_COMPLETE" if complete else "SYMBOL_INVENTORY_INCOMPLETE",
         "index_coverage_complete": result["index_coverage_complete"],
+        "duplicate_metadata_complete": result["duplicate_metadata_complete"],
         "invalid_object_count": len(result["invalid_objects"]),
         "duplicate_object_copies": sum(v["duplicate_object_copies"] for v in result["module_results"].values()),
         "modules": {k: {"indices_found": v["indices_found"], "unique_defined_symbols": v["unique_defined_symbols"], "unique_undefined_symbols": v["unique_undefined_symbols"], "duplicate_object_copies": v["duplicate_object_copies"]} for k, v in result["module_results"].items()},
