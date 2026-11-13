@@ -36,10 +36,11 @@ O caminho de `--report` deve ficar fora da pasta auditada. O resumo impresso no 
 - `cross_module_definition_candidates`: símbolos para os quais há definições em mais de um módulo AOT.
 - `undefined_without_aot_provider`: nomes indefinidos que não aparecem como definição no inventário AOT.
 - `multiply_defined_symbols_within_module`: nomes definidos em mais de um objeto do mesmo módulo, úteis para investigar colisões.
+- `duplicate_definition_profiles`: para cada nome duplicado entre objetos, mantém somente no JSON privado os bindings ELF, tipos, visibilidades, índices de seção e presença em grupos COMDAT por objeto. As métricas agregadas distinguem definições GLOBAL/WEAK/GNU_UNIQUE e se as definições pertencem a grupos COMDAT.
 - `invalid_objects`: objetos cujas tabelas ELF não puderam ser analisadas.
 
 ## Limites
 
-Um nome idêntico não comprova compatibilidade ABI. Esta etapa não valida relocations, versões ELF, convenções de chamada, layouts de estruturas, dependências transitivas nem aceitação pelo linker OpenOrbis. Depois do inventário, os candidatos devem ser confrontados com a mesma versão da toolchain, headers e bibliotecas OpenOrbis; só então se prepara um link privado controlado.
+Um nome idêntico não comprova compatibilidade ABI. Esta etapa não valida relocations, versões ELF, convenções de chamada, layouts de estruturas, dependências transitivas nem aceitação pelo linker OpenOrbis. A nova inspeção de binding/tipo/visibilidade/COMDAT melhora a classificação das definições repetidas, mas não substitui a execução de um link com a toolchain alvo. Depois do inventário, os candidatos devem ser confrontados com a mesma versão da toolchain, headers e bibliotecas OpenOrbis; só então se prepara um link privado controlado.
 
 **Status desta etapa:** ferramenta e testes públicos usam apenas ELF sintético. A execução real nos backups privados ainda depende de rodar o comando no ambiente que contém esses backups.
