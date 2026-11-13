@@ -29,12 +29,19 @@ SECTION = struct.Struct("<IIQQQQIIQQ")
 SYMBOL = struct.Struct("<IBBHQQ")
 SHT_SYMTAB = 2
 SHT_DYNSYM = 11
+SHT_GROUP = 17
+GRP_COMDAT = 1
 SHN_UNDEF = 0
 GLOBAL_BINDINGS = {1: "GLOBAL", 2: "WEAK", 10: "GNU_UNIQUE"}
+SYMBOL_TYPES = {
+    0: "NOTYPE", 1: "OBJECT", 2: "FUNC", 3: "SECTION", 4: "FILE",
+    5: "COMMON", 6: "TLS", 10: "GNU_IFUNC",
+}
+SYMBOL_VISIBILITIES = {0: "DEFAULT", 1: "INTERNAL", 2: "HIDDEN", 3: "PROTECTED"}
 
 
 def parse_elf_symbols(blob: bytes) -> dict:
-    """Return externally visible defined/undefined names from ELF64 LE x86-64."""
+    """Return global symbol names and detailed metadata for ELF64 LE x86-64."""
     if len(blob) < ELF_HEADER.size:
         raise ValueError("truncated_elf_header")
     header = ELF_HEADER.unpack_from(blob)
@@ -51,11 +58,30 @@ def parse_elf_symbols(blob: bytes) -> dict:
         raise ValueError("section_table_out_of_bounds")
 
     sections = [SECTION.unpack_from(blob, shoff + i * shentsize) for i in range(shnum)]
+    comdat_sections_by_symtab: dict[int, set[int]] = defaultdict(set)
+    for group in sections:
+        if group[1] != SHT_GROUP:
+            continue
+        group_offset, group_size, symtab_index = group[4], group[5], group[6]
+        if symtab_index >= len(sections) or sections[symtab_index][1] not in (SHT_SYMTAB, SHT_DYNSYM):
+            raise ValueError("invalid_comdat_symbol_table_link")
+        if group_size < 4 or group_size % 4:
+            raise ValueError("invalid_section_group_size")
+        if group_offset > len(blob) or group_size > len(blob) - group_offset:
+            raise ValueError("section_group_out_of_bounds")
+        words = struct.unpack_from("<" + "I" * (group_size // 4), blob, group_offset)
+        if words[0] & GRP_COMDAT:
+            for member_index in words[1:]:
+                if member_index >= len(sections):
+                    raise ValueError("section_group_member_out_of_bounds")
+                comdat_sections_by_symtab[symtab_index].add(member_index)
+
     defined: dict[str, set[str]] = defaultdict(set)
     undefined: dict[str, set[str]] = defaultdict(set)
+    defined_details: dict[str, list[dict]] = defaultdict(list)
     symbol_count = 0
 
-    for sec in sections:
+    for section_index, sec in enumerate(sections):
         sh_type, sh_offset, sh_size, sh_link, sh_entsize = sec[1], sec[4], sec[5], sec[6], sec[9]
         if sh_type not in (SHT_SYMTAB, SHT_DYNSYM):
             continue
@@ -70,9 +96,12 @@ def parse_elf_symbols(blob: bytes) -> dict:
         if str_offset > len(blob) or str_size > len(blob) - str_offset:
             raise ValueError("string_table_out_of_bounds")
         strings = blob[str_offset:str_offset + str_size]
+        comdat_sections = comdat_sections_by_symtab.get(section_index, set())
         for pos in range(sh_offset, sh_offset + sh_size, sh_entsize):
-            st_name, st_info, _st_other, st_shndx, _st_value, _st_size = SYMBOL.unpack_from(blob, pos)
+            st_name, st_info, st_other, st_shndx, _st_value, _st_size = SYMBOL.unpack_from(blob, pos)
             binding = st_info >> 4
+            symbol_type = st_info & 0x0F
+            visibility = st_other & 0x03
             if binding not in GLOBAL_BINDINGS or st_name == 0:
                 continue
             if st_name >= len(strings):
@@ -84,15 +113,25 @@ def parse_elf_symbols(blob: bytes) -> dict:
             if not name:
                 continue
             symbol_count += 1
-            target = undefined if st_shndx == SHN_UNDEF else defined
-            target[name].add(GLOBAL_BINDINGS[binding])
+            binding_name = GLOBAL_BINDINGS[binding]
+            if st_shndx == SHN_UNDEF:
+                undefined[name].add(binding_name)
+            else:
+                defined[name].add(binding_name)
+                defined_details[name].append({
+                    "binding": binding_name,
+                    "type": SYMBOL_TYPES.get(symbol_type, f"OTHER_{symbol_type}"),
+                    "visibility": SYMBOL_VISIBILITIES.get(visibility, f"OTHER_{visibility}"),
+                    "section_index": st_shndx,
+                    "comdat": st_shndx in comdat_sections,
+                })
 
     return {
         "defined": {k: sorted(v) for k, v in sorted(defined.items())},
         "undefined": {k: sorted(v) for k, v in sorted(undefined.items())},
+        "defined_details": {k: v for k, v in sorted(defined_details.items())},
         "external_symbol_entries": symbol_count,
     }
-
 
 def classify(name: str) -> str:
     if name.startswith(("nx::", "_ZN2nx", "_ZN3nx")):
@@ -157,6 +196,92 @@ def summarize_provider_candidates(provider_candidates: dict) -> dict[str, int]:
         "undefined_consumer_object_symbol_pairs_with_cross_module_provider_candidates": cross_module_pairs,
         "max_aot_provider_candidates_per_consumer_object_symbol_pair": max_providers_per_pair,
     }
+
+
+def summarize_duplicate_definitions(
+    all_definitions: dict[str, list[str]],
+    definition_metadata: dict[str, dict[str, list[dict]]],
+) -> tuple[dict, dict]:
+    """Summarize binding/type/visibility/COMDAT data for multiply-defined symbols."""
+    profiles = {}
+    binding_totals = Counter()
+    type_totals = Counter()
+    visibility_totals = Counter()
+    duplicate_locations = 0
+    comdat_locations = 0
+    non_comdat_locations = 0
+    names_all_comdat = 0
+    names_weak_or_unique_only = 0
+    names_non_comdat_global_across_modules = 0
+
+    for name, locations in sorted(all_definitions.items()):
+        unique_locations = sorted(set(locations))
+        if len(unique_locations) < 2:
+            continue
+
+        modules = sorted({loc.split(":", 1)[0] for loc in unique_locations})
+        location_profiles = []
+        non_comdat_global_modules = set()
+        for location in unique_locations:
+            entries = definition_metadata.get(name, {}).get(location, [])
+            bindings = sorted({item["binding"] for item in entries})
+            types = sorted({item["type"] for item in entries})
+            visibilities = sorted({item["visibility"] for item in entries})
+            section_indexes = sorted({item["section_index"] for item in entries})
+            is_comdat = bool(entries) and all(item["comdat"] for item in entries)
+            if any(item["binding"] == "GLOBAL" and not item["comdat"] for item in entries):
+                non_comdat_global_modules.add(location.split(":", 1)[0])
+            for item in entries:
+                binding_totals[item["binding"]] += 1
+                type_totals[item["type"]] += 1
+                visibility_totals[item["visibility"]] += 1
+            location_profiles.append({
+                "location": location,
+                "bindings": bindings,
+                "types": types,
+                "visibilities": visibilities,
+                "section_indexes": section_indexes,
+                "comdat": is_comdat,
+                "metadata_entries": len(entries),
+            })
+
+        all_locations_comdat = bool(location_profiles) and all(x["comdat"] for x in location_profiles)
+        only_weak_or_unique = bool(location_profiles) and all(
+            x["bindings"] and set(x["bindings"]).issubset({"WEAK", "GNU_UNIQUE"})
+            for x in location_profiles
+        )
+        if all_locations_comdat:
+            names_all_comdat += 1
+        if only_weak_or_unique:
+            names_weak_or_unique_only += 1
+        if len(non_comdat_global_modules) > 1:
+            names_non_comdat_global_across_modules += 1
+
+        duplicate_locations += len(location_profiles)
+        comdat_locations += sum(1 for x in location_profiles if x["comdat"])
+        non_comdat_locations += sum(1 for x in location_profiles if not x["comdat"])
+        profiles[name] = {
+            "location_count": len(unique_locations),
+            "module_names": modules,
+            "all_locations_comdat": all_locations_comdat,
+            "only_weak_or_gnu_unique_bindings": only_weak_or_unique,
+            "non_comdat_global_modules": sorted(non_comdat_global_modules),
+            "locations": location_profiles,
+        }
+
+    totals = {
+        "duplicate_definition_symbol_names": len(profiles),
+        "duplicate_definition_locations": duplicate_locations,
+        "duplicate_definition_locations_with_comdat": comdat_locations,
+        "duplicate_definition_locations_without_comdat": non_comdat_locations,
+        "duplicate_definition_symbol_names_all_locations_comdat": names_all_comdat,
+        "duplicate_definition_symbol_names_only_weak_or_gnu_unique": names_weak_or_unique_only,
+        "duplicate_definition_symbol_names_with_non_comdat_global_in_multiple_modules": names_non_comdat_global_across_modules,
+        "duplicate_definition_binding_entry_counts": dict(sorted(binding_totals.items())),
+        "duplicate_definition_type_entry_counts": dict(sorted(type_totals.items())),
+        "duplicate_definition_visibility_entry_counts": dict(sorted(visibility_totals.items())),
+    }
+    return profiles, totals
 
 
 def audit(root: Path) -> dict:
@@ -237,6 +362,7 @@ def audit(root: Path) -> dict:
     module_results = {}
     all_definitions: dict[str, list[str]] = defaultdict(list)
     all_undefined: dict[str, set[str]] = defaultdict(set)
+    all_definition_metadata: dict[str, dict[str, list[dict]]] = defaultdict(lambda: defaultdict(list))
     total_objects = 0
     for module, expected in EXPECTED.items():
         indices = objects[module]
@@ -276,6 +402,9 @@ def audit(root: Path) -> dict:
     }
     provider_candidates = build_provider_candidates(all_definitions, all_undefined)
     provider_candidate_stats = summarize_provider_candidates(provider_candidates)
+    duplicate_definition_profiles, duplicate_definition_stats = summarize_duplicate_definitions(
+        all_definitions, all_definition_metadata
+    )
     cross_module_provider_names = {
         name for name, consumers in provider_candidates.items()
         if any(
@@ -301,8 +430,10 @@ def audit(root: Path) -> dict:
             "undefined_symbols_with_aot_provider_candidates": len(provider_candidates),
             "undefined_symbols_with_cross_module_provider_candidates": len(cross_module_provider_names),
             **provider_candidate_stats,
+            **duplicate_definition_stats,
         },
         "cross_module_definition_candidates": cross_module_candidates,
+        "duplicate_definition_profiles": duplicate_definition_profiles,
         "undefined_symbol_provider_candidates": provider_candidates,
         "undefined_without_aot_provider": unresolved_in_inventory,
         "invalid_objects": invalid,
