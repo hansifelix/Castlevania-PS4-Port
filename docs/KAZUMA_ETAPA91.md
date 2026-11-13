@@ -6,9 +6,9 @@ Depois da Etapa 90-C confirmar a integridade estrutural dos 1.916 objetos, esta 
 
 - Símbolos globais/weak definidos por cada objeto;
 - Símbolos globais/weak indefinidos que cada objeto requer;
-- Nomes com candidatos de definição em outros módulos AOT;
+- Nomes com candidatos de definição em outros objetos AOT, no mesmo ou em outro módulo;
 - Símbolos ainda sem candidato dentro do inventário AOT;
-- Para cada símbolo indefinido, candidatos definidos em outros módulos AOT, discriminados pelo módulo consumidor.
+- Para cada símbolo indefinido, candidatos definidos em outros objetos AOT, discriminados pelo objeto consumidor.
 
 O parser lê ELF64 little-endian ET_REL x86-64 e mantém os nomes mangled exatos. Ele lê um membro por vez de ZIP/TAR.GZ, sem extrair os objetos para o Drive. Os testes públicos incluem arquivos ZIP e TAR.GZ sintéticos para conferir essa leitura sem extração. O CI executa os cinco testes do inventário de símbolos, além da suíte CTest e da auditoria estrutural anterior, sempre com dados fictícios.
 
@@ -32,7 +32,7 @@ O caminho de `--report` deve ficar fora da pasta auditada. O resumo impresso no 
 
 ## Como interpretar
 
-- `undefined_symbol_provider_candidates`: para cada módulo consumidor, lista definições do mesmo nome encontradas em outros módulos AOT. São candidatos, não prova de resolução correta.
+- `undefined_symbol_provider_candidates`: para cada símbolo indefinido, mapeia cada objeto consumidor aos outros objetos AOT que definem o mesmo nome. São candidatos, não prova de resolução correta. As métricas agregadas contam pares objeto-símbolo, provedores únicos por par, ambiguidades e candidatos entre módulos.
 - `cross_module_definition_candidates`: símbolos para os quais há definições em mais de um módulo AOT.
 - `undefined_without_aot_provider`: nomes indefinidos que não aparecem como definição no inventário AOT.
 - `multiply_defined_symbols_within_module`: nomes definidos em mais de um objeto do mesmo módulo, úteis para investigar colisões.
