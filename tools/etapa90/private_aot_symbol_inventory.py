@@ -370,6 +370,8 @@ def audit(root: Path) -> dict:
         undefined = Counter()
         missing = sorted(set(range(expected)) - set(indices))
         unexpected = sorted(i for i in indices if i < 0 or i >= expected)
+        duplicate_indices = sorted(index for index, copies in indices.items() if len(copies) > 1)
+        duplicate_object_copies = sum(len(copies) - 1 for copies in indices.values() if len(copies) > 1)
         for index, copies in indices.items():
             for copy in copies:
                 total_objects += 1
@@ -390,6 +392,8 @@ def audit(root: Path) -> dict:
             "object_copies_parsed": sum(len(v) for v in indices.values()),
             "missing_indices": missing,
             "unexpected_indices": unexpected,
+            "duplicate_indices": duplicate_indices,
+            "duplicate_object_copies": duplicate_object_copies,
             "unique_defined_symbols": len(defined),
             "unique_undefined_symbols": len(undefined),
             "multiply_defined_symbols_within_module": sorted(k for k, v in defined.items() if v > 1),
@@ -442,7 +446,10 @@ def audit(root: Path) -> dict:
         "undefined_symbol_provider_candidates": provider_candidates,
         "undefined_without_aot_provider": unresolved_in_inventory,
         "invalid_objects": invalid,
-        "index_coverage_complete": all(not x["missing_indices"] and not x["unexpected_indices"] for x in module_results.values()),
+        "index_coverage_complete": all(
+            not x["missing_indices"] and not x["unexpected_indices"] and not x["duplicate_indices"]
+            for x in module_results.values()
+        ),
         "private_symbol_names_in_report": True,
         "inputs_modified": False,
         "files_extracted": False,
@@ -458,6 +465,11 @@ def audit(root: Path) -> dict:
     }
 
 
+def inventory_is_complete(result: dict) -> bool:
+    """Fail closed unless every expected object index appears exactly once and parses."""
+    return bool(result.get("index_coverage_complete")) and not result.get("invalid_objects")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Private read-only AOT ELF symbol inventory")
     parser.add_argument("--root", type=Path, required=True)
@@ -471,14 +483,18 @@ def main() -> int:
         parser.error("--report must be outside the private input tree and not a symlink")
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(report, encoding="utf-8")
+    complete = inventory_is_complete(result)
     print(json.dumps({
-        "status": "SYMBOL_INVENTORY_COMPLETE" if not result["invalid_objects"] else "SYMBOL_INVENTORY_WITH_ERRORS",
-        "modules": {k: {"indices_found": v["indices_found"], "unique_defined_symbols": v["unique_defined_symbols"], "unique_undefined_symbols": v["unique_undefined_symbols"]} for k, v in result["module_results"].items()},
+        "status": "SYMBOL_INVENTORY_COMPLETE" if complete else "SYMBOL_INVENTORY_INCOMPLETE",
+        "index_coverage_complete": result["index_coverage_complete"],
+        "invalid_object_count": len(result["invalid_objects"]),
+        "duplicate_object_copies": sum(v["duplicate_object_copies"] for v in result["module_results"].values()),
+        "modules": {k: {"indices_found": v["indices_found"], "unique_defined_symbols": v["unique_defined_symbols"], "unique_undefined_symbols": v["unique_undefined_symbols"], "duplicate_object_copies": v["duplicate_object_copies"]} for k, v in result["module_results"].items()},
         "totals": result["totals"],
         "report_path": str(destination),
         "private_symbol_names_written_to_report": True,
     }, ensure_ascii=True, indent=2))
-    return 0 if not result["invalid_objects"] else 1
+    return 0 if complete else 1
 
 
 if __name__ == "__main__":

@@ -10,7 +10,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tools.etapa90.private_aot_symbol_inventory import (
-    audit, build_provider_candidates, parse_elf_symbols,
+    audit, build_provider_candidates, inventory_is_complete, parse_elf_symbols,
     summarize_duplicate_definitions, summarize_provider_candidates,
 )
 
@@ -154,8 +154,29 @@ class PrivateAotSymbolInventoryTests(unittest.TestCase):
             self.assertEqual(result["totals"]["duplicate_definition_type_entry_counts"], {"FUNC": 2})
             self.assertEqual(result["totals"]["duplicate_definition_visibility_entry_counts"], {"DEFAULT": 2})
             self.assertEqual(result["totals"]["duplicate_definition_locations_without_comdat"], 2)
+            self.assertFalse(result["index_coverage_complete"])
+            self.assertFalse(inventory_is_complete(result))
             self.assertFalse(result["files_extracted"])
             self.assertEqual(sorted(p.name for p in root.iterdir()), ["KazumaMAIN.zip", "KazumaSDK.tar.gz"])
+
+    def test_duplicate_object_indices_fail_closed(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / "private"
+            root.mkdir()
+            elf = tiny_elf64()
+            for name in ("KazumaMAIN.zip", "KazumaMAIN_backup.zip"):
+                with zipfile.ZipFile(root / name, "w") as archive:
+                    archive.writestr("objects/code_0000.o", elf)
+            result = audit(root)
+            self.assertEqual(result["module_results"]["main"]["duplicate_indices"], [0])
+            self.assertEqual(result["module_results"]["main"]["duplicate_object_copies"], 1)
+            self.assertFalse(result["index_coverage_complete"])
+            self.assertFalse(inventory_is_complete(result))
+
+    def test_complete_inventory_predicate_requires_coverage_and_no_parse_errors(self):
+        self.assertTrue(inventory_is_complete({"index_coverage_complete": True, "invalid_objects": []}))
+        self.assertFalse(inventory_is_complete({"index_coverage_complete": False, "invalid_objects": []}))
+        self.assertFalse(inventory_is_complete({"index_coverage_complete": True, "invalid_objects": [{"reason": "bad"}]}))
 
     def test_rejects_non_relocatable_elf(self):
         blob = bytearray(tiny_elf64())
