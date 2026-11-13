@@ -85,3 +85,8 @@ Nenhum backup privado foi alterado. Nenhum objeto privado foi compilado ou ligad
 A primeira execução do notebook Etapa 92 identificou uma falha na agregação: o parser extraía os metadados por símbolo, mas a rotina que consolidava os objetos não os copiava para o acumulador global. Por isso, o JSON dessa primeira execução apresentou listas vazias de binding/tipo/visibilidade e zero entradas de metadados nos perfis duplicados. **Essas métricas não são utilizáveis e não devem ser interpretadas como ausência de COMDAT ou como definições fortes.**
 
 Correção aplicada na branch: cada objeto agora transfere seus `defined_details` para o acumulador por nome e localização. O teste de auditoria ZIP/TAR sintético foi ampliado para exigir dois provedores duplicados com binding GLOBAL, tipo FUNC e visibilidade DEFAULT, além de conferir os contadores agregados. O relatório da primeira execução deve ser mantido como histórico inválido para essa parte; é necessário executar novamente o notebook atualizado.
+
+
+## Etapa 95 — preservação dos relatórios (13/11/2026)
+
+O inventário privado não sobrescreve um relatório existente por padrão. Se o caminho informado já existir, grava em um novo nome versionado (`_v2`, `_v3`, ...) e imprime o caminho efetivo no resumo. A substituição do arquivo existente exige a opção explícita `--overwrite-report`. Isso preserva a primeira saída Etapa 92, que continua inválida para as métricas de binding/COMDAT, enquanto a nova auditoria pode ser gerada sem perder o histórico.
