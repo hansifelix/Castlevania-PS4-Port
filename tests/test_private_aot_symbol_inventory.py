@@ -9,7 +9,7 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from tools.etapa90.private_aot_symbol_inventory import audit, build_provider_candidates, parse_elf_symbols
+from tools.etapa90.private_aot_symbol_inventory import audit, build_provider_candidates, parse_elf_symbols, summarize_provider_candidates
 
 
 def tiny_elf64():
@@ -57,6 +57,22 @@ class PrivateAotSymbolInventoryTests(unittest.TestCase):
         self.assertEqual(result["_shared_fn"]["MAIN:5"], ["MAIN:4", "SDK:8"])
         self.assertEqual(result["_shared_fn"]["subsdk0:2"], ["MAIN:4", "SDK:8"])
         self.assertEqual(result["_same_module_fn"]["MAIN:10"], ["MAIN:9"])
+
+    def test_summarizes_provider_candidates_per_consumer_object_symbol_pair(self):
+        result = summarize_provider_candidates({
+            "_single_provider": {
+                "MAIN:3": ["MAIN:1"],
+                "SDK:2": ["SDK:4"],
+            },
+            "_multiple_providers": {
+                "MAIN:8": ["MAIN:4", "SDK:9"],
+            },
+        })
+        self.assertEqual(result["undefined_consumer_object_symbol_pairs_with_aot_provider_candidates"], 3)
+        self.assertEqual(result["undefined_consumer_object_symbol_pairs_with_single_provider_candidate"], 2)
+        self.assertEqual(result["undefined_consumer_object_symbol_pairs_with_multiple_provider_candidates"], 1)
+        self.assertEqual(result["undefined_consumer_object_symbol_pairs_with_cross_module_provider_candidates"], 1)
+        self.assertEqual(result["max_aot_provider_candidates_per_consumer_object_symbol_pair"], 2)
 
     def test_audits_zip_and_tar_gz_members_without_extracting(self):
         with tempfile.TemporaryDirectory() as temporary:
