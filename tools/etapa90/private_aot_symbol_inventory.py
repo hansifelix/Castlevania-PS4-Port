@@ -124,6 +124,41 @@ def build_provider_candidates(all_definitions: dict[str, list[str]], all_undefin
     return candidates
 
 
+def summarize_provider_candidates(provider_candidates: dict) -> dict[str, int]:
+    """Return aggregate counts for consumer-object/symbol provider candidates."""
+    consumer_pairs = 0
+    single_provider_pairs = 0
+    multiple_provider_pairs = 0
+    cross_module_pairs = 0
+    max_providers_per_pair = 0
+
+    for consumers in provider_candidates.values():
+        for consumer, providers in consumers.items():
+            unique_providers = sorted(set(providers))
+            if not unique_providers:
+                continue
+            consumer_pairs += 1
+            provider_count = len(unique_providers)
+            max_providers_per_pair = max(max_providers_per_pair, provider_count)
+            if provider_count == 1:
+                single_provider_pairs += 1
+            else:
+                multiple_provider_pairs += 1
+            if any(
+                provider.split(":", 1)[0] != consumer.split(":", 1)[0]
+                for provider in unique_providers
+            ):
+                cross_module_pairs += 1
+
+    return {
+        "undefined_consumer_object_symbol_pairs_with_aot_provider_candidates": consumer_pairs,
+        "undefined_consumer_object_symbol_pairs_with_single_provider_candidate": single_provider_pairs,
+        "undefined_consumer_object_symbol_pairs_with_multiple_provider_candidates": multiple_provider_pairs,
+        "undefined_consumer_object_symbol_pairs_with_cross_module_provider_candidates": cross_module_pairs,
+        "max_aot_provider_candidates_per_consumer_object_symbol_pair": max_providers_per_pair,
+    }
+
+
 def audit(root: Path) -> dict:
     root = root.expanduser()
     if root.is_symlink() or not root.is_dir():
@@ -240,6 +275,7 @@ def audit(root: Path) -> dict:
         if name not in all_definitions
     }
     provider_candidates = build_provider_candidates(all_definitions, all_undefined)
+    provider_candidate_stats = summarize_provider_candidates(provider_candidates)
     cross_module_provider_names = {
         name for name, consumers in provider_candidates.items()
         if any(
@@ -264,6 +300,7 @@ def audit(root: Path) -> dict:
             "undefined_symbols_without_provider_in_aot_inventory": len(unresolved_in_inventory),
             "undefined_symbols_with_aot_provider_candidates": len(provider_candidates),
             "undefined_symbols_with_cross_module_provider_candidates": len(cross_module_provider_names),
+            **provider_candidate_stats,
         },
         "cross_module_definition_candidates": cross_module_candidates,
         "undefined_symbol_provider_candidates": provider_candidates,
