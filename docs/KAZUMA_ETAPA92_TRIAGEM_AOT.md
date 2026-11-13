@@ -78,3 +78,10 @@ O notebook Colab da Etapa 91 já faz fetch da branch antes de executar. Portanto
 ## Limites da etapa
 
 Nenhum backup privado foi alterado. Nenhum objeto privado foi compilado ou ligado. Nenhum EBOOT, PKG ou teste de gameplay no PS4 foi produzido nesta etapa. A `main` permanece intocada; o trabalho está isolado na branch da Etapa 91/92.
+
+
+## Correção após revisão do primeiro relatório Etapa 92
+
+A primeira execução do notebook Etapa 92 identificou uma falha na agregação: o parser extraía os metadados por símbolo, mas a rotina que consolidava os objetos não os copiava para o acumulador global. Por isso, o JSON dessa primeira execução apresentou listas vazias de binding/tipo/visibilidade e zero entradas de metadados nos perfis duplicados. **Essas métricas não são utilizáveis e não devem ser interpretadas como ausência de COMDAT ou como definições fortes.**
+
+Correção aplicada na branch: cada objeto agora transfere seus `defined_details` para o acumulador por nome e localização. O teste de auditoria ZIP/TAR sintético foi ampliado para exigir dois provedores duplicados com binding GLOBAL, tipo FUNC e visibilidade DEFAULT, além de conferir os contadores agregados. O relatório da primeira execução deve ser mantido como histórico inválido para essa parte; é necessário executar novamente o notebook atualizado.
