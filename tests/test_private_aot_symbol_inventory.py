@@ -148,6 +148,12 @@ class PrivateAotSymbolInventoryTests(unittest.TestCase):
             result = audit(root)
             self.assertEqual(result["module_results"]["main"]["object_copies_parsed"], 1)
             self.assertEqual(result["module_results"]["sdk"]["object_copies_parsed"], 1)
+            duplicate = result["duplicate_definition_profiles"]["_defined_fn"]
+            self.assertEqual(duplicate["location_count"], 2)
+            self.assertEqual(result["totals"]["duplicate_definition_binding_entry_counts"], {"GLOBAL": 2})
+            self.assertEqual(result["totals"]["duplicate_definition_type_entry_counts"], {"FUNC": 2})
+            self.assertEqual(result["totals"]["duplicate_definition_visibility_entry_counts"], {"DEFAULT": 2})
+            self.assertEqual(result["totals"]["duplicate_definition_locations_without_comdat"], 2)
             self.assertFalse(result["files_extracted"])
             self.assertEqual(sorted(p.name for p in root.iterdir()), ["KazumaMAIN.zip", "KazumaSDK.tar.gz"])
 
