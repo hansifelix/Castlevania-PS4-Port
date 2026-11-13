@@ -24,4 +24,7 @@ class BuildTests(unittest.TestCase):
         self.assertNotIn('MAP_FIXED |',s)  # no forced mappings
         self.assertNotIn('reinterpret_cast<volatile unsigned char*>(addr)[0]',s)
         self.assertIn('if (r.commit_ok)',s)
+        self.assertIn('RESERVA_MANTIDA_ATE_FIM_DO_PROCESSO',s)
+        self.assertNotIn('munmap(reinterpret_cast<void*>(addr)',s)
+        self.assertNotIn('munmap(reinterpret_cast<void*>(static_cast<uintptr_t>(module_bases[i]))',s)
 if __name__=='__main__':unittest.main()

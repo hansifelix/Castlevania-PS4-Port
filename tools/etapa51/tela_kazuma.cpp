@@ -95,9 +95,9 @@ static Probe probe_once() {
   nx::plat::decommit(static_cast<uint64_t>(addr),static_cast<uint64_t>(page));
   r.decommit_called=true;  // void return: cannot claim success just from calling it.
   std::puts("KAZUMA51: DECOMMIT=CHAMADO_SEM_VERIFICACAO_DE_PROTECAO");
-  // Never access this address after decommit.
-  const int unmap_rc=munmap(reinterpret_cast<void*>(addr),static_cast<size_t>(page));
-  std::printf("KAZUMA51: LIMPEZA_MUNMAP=%s\n",unmap_rc==0?"OK":"FALHA");
+  // Keep the reservation tracked by nx::plat until this probe process exits.
+  // decommit leaves the mapping reserved as PROT_NONE; do not munmap it externally.
+  std::puts("KAZUMA51: RESERVA_MANTIDA_ATE_FIM_DO_PROCESSO");
  }
  // Minimal one-page probes for three base addresses listed in the game's PUBLIC build manifest.
  // Not a test that complete AOT modules or assets will fit. Never MAP_FIXED or touch reserved memory.
@@ -111,7 +111,7 @@ static Probe probe_once() {
   const bool ok=nx::plat::reserve(module_bases[i],static_cast<uint64_t>(page));
   if(ok) {
    ++r.guest_bases_ok;
-   (void)munmap(reinterpret_cast<void*>(static_cast<uintptr_t>(module_bases[i])),static_cast<size_t>(page));
+   // Keep this one-page PROT_NONE mapping tracked until process exit.
   }
   std::printf("KAZUMA51: BASE_%s_PAGINA=%s\n",names[i],ok?"ACEITA":"RECUSADA");
  }

@@ -6,8 +6,8 @@
 
 1. Consulta `sysconf(_SC_PAGESIZE)` e recusa paginas fora de 4–64 KiB.
 2. O sistema escolhe uma pagina livre via `mmap(nullptr)`, que e imediatamente liberada. O adaptador tenta reservar **exatamente** essa pagina usando apenas a direcao como *hint* (sem MAP_FIXED).
-3. Se houve reserva e `commit`, escreve dois bytes dentro da pagina, valida leitura e chama `decommit` **sem tentar ler depois** (evita fault proposital).
-4. Libera o mapeamento com `munmap` e tenta reservar **somente uma pagina** em cada um dos enderecos-base publicos `0x4000000000` (main), `0x4010000000` (sdk), `0x4020000000` (subsdk0), reportando aceite/recusa. Nao testa regioes comerciais grandes, nem carrega modules AOT.
+3. Se houve reserva e `commit`, escreve dois bytes dentro da pagina, valida leitura e chama `decommit` **sem tentar ler depois** (evita fault proposital). A reserva permanece mapeada como `PROT_NONE` e rastreada pelo adaptador ate o fim do processo.
+4. Tenta reservar **somente uma pagina** em cada um dos enderecos-base publicos `0x4000000000` (main), `0x4010000000` (sdk), `0x4020000000` (subsdk0), reportando aceite/recusa. As reservas aceitas ficam intactas ate o encerramento do homebrew; nao chamar `munmap` por fora do adaptador. Nao testa regioes comerciais grandes, nem carrega modules AOT.
 5. Abre a interface Kazuma, com indicador dos resultados e Klog `KAZUMA51:`.
 
 **Limites:** sucesso num teste de 1 pagina **NAO** garante que um modulo inteiro possa ser mapeado, nem inicializa o motor ou a GPU do jogo. Um `DECOMMIT=CHAMADO` nao comprova que protecao foi alterada (API retorna void). O sistema pode recusar enderecos; isso deve ser tratado como falha segura, nao como autorizacao para usar MAP_FIXED.
