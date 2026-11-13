@@ -4,6 +4,7 @@ import struct
 import tarfile
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 from pathlib import Path
 import sys
@@ -219,7 +220,7 @@ class PrivateAotSymbolInventoryTests(unittest.TestCase):
             report = Path(temporary) / "RELATORIO_ETAPA92_BINDINGS_COMDAT_PRIVADO.json"
             report.write_text("historico-invalido", encoding="utf-8")
             output = io.StringIO()
-            with unittest.mock.patch.object(sys, "argv", [
+            with patch.object(sys, "argv", [
                 "private_aot_symbol_inventory.py", "--root", str(root), "--report", str(report)
             ]), redirect_stdout(output):
                 exit_code = main()
