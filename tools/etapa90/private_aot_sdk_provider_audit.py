@@ -12,9 +12,9 @@ from collections import Counter, defaultdict
 from pathlib import Path
 
 LINE = re.compile(
-    r"^(?P<origin>.*?):\\s+(?P<symbol>\\S+)\\s+(?P<kind>[A-Za-z?])(?:\\s+\\S+){0,2}$"
+    r"^(?P<origin>.*?):\s+(?P<symbol>\S+)\s+(?P<kind>[A-Za-z?])(?:\s+\S+){0,2}$"
 )
-VERSIONED_SO = re.compile(r"\\.so(?:\\.\\d+)*$", re.IGNORECASE)
+VERSIONED_SO = re.compile(r"\.so(?:\.\d+)*$", re.IGNORECASE)
 SUFFIXES = {".a", ".so", ".o", ".elf", ".prx"}
 
 
