@@ -23,14 +23,20 @@ def complete(data):
         data.get("audit_mode") == "READ_ONLY_SYMBOL_TABLE_PARSE_NO_EXTRACT_NO_COMPILE_NO_LINK"
         and data.get("index_coverage_complete") is True
         and data.get("duplicate_metadata_complete") is True
+        and isinstance(data.get("invalid_objects"), list)
         and not data.get("invalid_objects")
         and data.get("private_symbol_names_in_report") is True
         and data.get("files_extracted") is False
         and data.get("compilation_performed") is False
         and data.get("link_performed") is False
+        and isinstance(data.get("totals"), dict)
         and isinstance(data.get("undefined_without_aot_provider"), dict)
-        and data.get("totals", {}).get("undefined_symbols_without_provider_in_aot_inventory")
-        == len(data.get("undefined_without_aot_provider", {}))
+        and isinstance(
+            data["totals"].get("undefined_symbols_without_provider_in_aot_inventory"),
+            int,
+        )
+        and data["totals"]["undefined_symbols_without_provider_in_aot_inventory"]
+        == len(data["undefined_without_aot_provider"])
     )
 
 
@@ -45,8 +51,6 @@ def parse_nm_records(text):
             raise ValueError("nm_warning_in_output")
         match = LINE.match(line)
         if not match:
-            if line.startswith(("nm:", "llvm-nm:")):
-                continue
             raise ValueError("unrecognized_nm_posix_line")
         kind = match.group("kind")
         if kind.upper() != "U":
