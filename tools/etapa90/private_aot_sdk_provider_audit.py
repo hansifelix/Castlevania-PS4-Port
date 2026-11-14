@@ -31,10 +31,9 @@ def complete(data):
         and data.get("link_performed") is False
         and isinstance(data.get("totals"), dict)
         and isinstance(data.get("undefined_without_aot_provider"), dict)
-        and isinstance(
-            data["totals"].get("undefined_symbols_without_provider_in_aot_inventory"),
-            int,
-        )
+        and type(
+            data["totals"].get("undefined_symbols_without_provider_in_aot_inventory")
+        ) is int
         and data["totals"]["undefined_symbols_without_provider_in_aot_inventory"]
         == len(data["undefined_without_aot_provider"])
     )
@@ -107,9 +106,12 @@ def provider_files(root):
 
 def _archive_member_suffix(origin, path):
     prefix = str(path)
-    if origin.startswith(prefix):
-        suffix = origin[len(prefix):]
-        return suffix[1:] if suffix.startswith(":") else suffix
+    if origin == prefix:
+        return ""
+    if origin.startswith(prefix + "["):
+        return origin[len(prefix):]
+    if origin.startswith(prefix + ":"):
+        return origin[len(prefix) + 1:]
     # Some nm implementations print a relative origin. Keep only its basename
     # rather than leaking an unrelated absolute path into the private report.
     return Path(origin).name
