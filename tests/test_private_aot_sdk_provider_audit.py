@@ -1,5 +1,6 @@
 import json, subprocess, sys, tempfile, unittest
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools.etapa90.private_aot_sdk_provider_audit import complete, parse_nm, provider_files, safe_report, scan
 
 def inventory():
@@ -21,7 +22,7 @@ class ProviderAuditTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"unrecognized_nm_posix_line"): parse_nm("not nm output")
     def test_unique_ambiguous_and_missing_candidates(self):
         with tempfile.TemporaryDirectory() as td:
-            root=Path(td); 
+            root=Path(td)
             for name in ("one.a","two.a","none.a"): (root/name).write_bytes(b"synthetic")
             def fake(cmd,**kwargs):
                 name=Path(cmd[-1]).name
