@@ -89,7 +89,7 @@ class ProviderAuditTests(unittest.TestCase):
             obj = root / "provider.o"
             archive = root / "libproviders.a"
             source.write_text(
-                "int provider_symbol(void) { return 7; }\\n",
+                "int provider_symbol(void) { return 7; }\n",
                 encoding="utf-8",
             )
             subprocess.run(
