@@ -48,6 +48,9 @@ class ProviderAuditTests(unittest.TestCase):
         data = inventory()
         data["index_coverage_complete"] = False
         self.assertFalse(complete(data))
+        data = inventory()
+        del data["invalid_objects"]
+        self.assertFalse(complete(data))
 
     def test_parses_nm_archive_and_object_rows(self):
         got = parse_nm_records(
@@ -70,6 +73,8 @@ class ProviderAuditTests(unittest.TestCase):
     def test_rejects_unrecognized_nm_output(self):
         with self.assertRaisesRegex(ValueError, "unrecognized_nm_posix_line"):
             parse_nm_records("not nm output")
+        with self.assertRaisesRegex(ValueError, "unrecognized_nm_posix_line"):
+            parse_nm_records("nm: unexpected partial-output diagnostic")
 
     def test_rejects_warning_even_when_nm_output_is_present(self):
         with self.assertRaisesRegex(ValueError, "nm_warning_in_output"):
