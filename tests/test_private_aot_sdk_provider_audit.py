@@ -1,4 +1,5 @@
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -75,6 +76,50 @@ class ProviderAuditTests(unittest.TestCase):
             parse_nm_records("not nm output")
         with self.assertRaisesRegex(ValueError, "unrecognized_nm_posix_line"):
             parse_nm_records("nm: unexpected partial-output diagnostic")
+
+    def test_real_gnu_nm_archive_member_format(self):
+        nm = shutil.which("nm")
+        compiler = shutil.which("cc")
+        archiver = shutil.which("ar")
+        if not (nm and compiler and archiver):
+            self.skipTest("GNU nm, C compiler, or ar unavailable")
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            source = root / "provider.c"
+            obj = root / "provider.o"
+            archive = root / "libproviders.a"
+            source.write_text(
+                "int provider_symbol(void) { return 7; }\\n",
+                encoding="utf-8",
+            )
+            subprocess.run(
+                [compiler, "-c", str(source), "-o", str(obj)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            subprocess.run(
+                [archiver, "rcs", str(archive), str(obj)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            result = subprocess.run(
+                [nm, "-A", "-g", "--defined-only", "--format=posix", str(archive)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            records = parse_nm_records(result.stdout)
+            self.assertTrue(
+                any(
+                    origin.endswith("[provider.o]")
+                    and symbol == "provider_symbol"
+                    and kind.upper() == "T"
+                    for origin, symbol, kind in records
+                ),
+                result.stdout,
+            )
 
     def test_rejects_warning_even_when_nm_output_is_present(self):
         with self.assertRaisesRegex(ValueError, "nm_warning_in_output"):
@@ -181,10 +226,11 @@ class ProviderAuditTests(unittest.TestCase):
             (real / "inside.a").write_text("x")
             (root / "alias.a").symlink_to(real / "inside.a")
             (root / "alias-dir").symlink_to(real, target_is_directory=True)
+            (root / "libversioned.so.1").write_text("x")
             found = provider_files(root)
             self.assertEqual(
                 [path.relative_to(root).as_posix() for path in found],
-                ["real/inside.a"],
+                ["libversioned.so.1", "real/inside.a"],
             )
 
     def test_preserves_existing_report(self):
@@ -203,6 +249,16 @@ class ProviderAuditTests(unittest.TestCase):
             root = Path(td)
             with self.assertRaisesRegex(ValueError, "outside"):
                 safe_report(root / "out.json", [root], False)
+
+    def test_rejects_report_parent_symlink(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            real = root / "real"
+            real.mkdir()
+            alias = root / "alias"
+            alias.symlink_to(real, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, "symlink"):
+                safe_report(alias / "out.json", [], False)
 
 
 if __name__ == "__main__":
