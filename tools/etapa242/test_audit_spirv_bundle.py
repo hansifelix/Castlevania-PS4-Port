@@ -32,8 +32,8 @@ class AuditTests(unittest.TestCase):
         self.validator.chmod(0o700)
         self.records = [{"hash": A, "stage": "vertex", "required": True},
                         {"hash": B, "stage": "pixel", "required": False}]
-        self.rows = [{"hash": A, "stage": "vertex", "status": "ok", "spv_bytes": "20"},
-                     {"hash": B, "stage": "fragment", "status": "ok", "spv_bytes": "20"}]
+        self.rows = [{"hash": A, "stage": "vertex", "status": "ok", "spv_bytes": "36"},
+                     {"hash": B, "stage": "fragment", "status": "ok", "spv_bytes": "36"}]
         for h, model in ((A, 0), (B, 4)):
             (self.spv / (h + ".spv")).write_bytes(spirv_module(model))
         self.save()
@@ -67,6 +67,8 @@ class AuditTests(unittest.TestCase):
 
     def test_header_invalid(self):
         (self.spv / (B + ".spv")).write_bytes(b"BAD!" + bytes(16))
+        self.rows[1]["spv_bytes"] = "20"
+        self.save()
         self.assertEqual(self.run_audit()["status"], "BLOCKED")
 
     def test_exhaustiveness(self):
