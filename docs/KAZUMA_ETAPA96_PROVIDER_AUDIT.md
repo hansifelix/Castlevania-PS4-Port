@@ -32,6 +32,7 @@ A revisão da própria ferramenta encontrou dois riscos de classificação que p
 - O formato `nm -A` identifica o membro de um archive, por exemplo `lib.a[member.o]`. A versão inicial descartava esse identificador e podia tratar duas definições em membros diferentes do mesmo `.a` como uma única candidata. Agora cada definição mantém o membro; duas definições distintas são classificadas como **ambíguas**, mesmo dentro do mesmo archive.
 - Raízes sobrepostas podiam fazer a mesma biblioteca física aparecer mais de uma vez. A varredura agora deduplica a mesma definição física, sem apagar diferenças entre membros, e não segue diretórios/arquivos symlink.
 - Qualquer diagnóstico em stderr, saída malformada, timeout ou erro de leitura marca a varredura como incompleta. O CLI retorna código não zero; não transforma leitura parcial em sucesso.
+- A política de symlink foi endurecida: arquivos provedores symlink e diretórios symlink são contabilizados sem segui-los. Como um diretório ignorado pode esconder bibliotecas, qualquer symlink encontrado torna `all_provider_roots_scanned=false`; o JSON registra somente caminho relativo e tipo, e o CLI retorna código não zero. Isso evita classificar falsamente uma ausência de candidato como varredura completa.
 - O relatório permanece fora das raízes inspecionadas e não sobrescreve arquivos anteriores sem opção explícita.
 
 A suíte pública agora cobre membro duplicado no mesmo archive, raízes sobrepostas, symlinks e diagnóstico de `nm` em stderr, além dos casos anteriores. Ela usa apenas bibliotecas e inventários fictícios.
@@ -54,7 +55,9 @@ CI [#43592424980 SUCCESS](https://github.com/hansifelix/Castlevania-PS4-Port/act
 - CTest: 33/33.
 - Auditor estrutural: 9 testes.
 - Inventário de símbolos: 12 testes.
-- Provedores SDK/runtime: 12 testes, incluindo execução de GNU `nm` real sobre um archive sintético, ambiguidade entre membros do mesmo archive, deduplicação de raízes sobrepostas, symlinks e rejeição de diagnósticos parciais.
+- Provedores SDK/runtime: 13 testes, incluindo execução de GNU `nm` real sobre um archive sintético, ambiguidade entre membros do mesmo archive, deduplicação de raízes sobrepostas, symlinks e rejeição de diagnósticos parciais.
+
+CI posterior **#43711476397 SUCCESS (15/11/2026)** repetiu o conjunto completo após a correção fail-closed: CTest 33/33, auditor estrutural 9, inventário 12 e scanner de provedores **13 testes**. A regressão nova confirma que um diretório provedor symlink externo é registrado e impede `PROVIDER_SCAN_COMPLETE`; nenhum candidato oculto é tratado como ausência conclusiva.
 
 Tudo usa fixtures sintéticas; não lê os objetos comerciais, não compila AOT, não liga ELF e não executa no PS4.
 
