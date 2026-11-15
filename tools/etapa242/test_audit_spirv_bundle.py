@@ -11,6 +11,12 @@ A, B = "0123456789abcdef", "fedcba9876543210"
 FIELDS = ["hash", "stage", "status", "spv_bytes"]
 
 
+def spirv_module(model):
+    # Header plus one OpEntryPoint (execution model, id, null-terminated "m").
+    return struct.pack("<9I", 0x07230203, 0x00010500, 0, 2, 0,
+                       (4 << 16) | 15, model, 1, 0x0000006D)
+
+
 class AuditTests(unittest.TestCase):
     def setUp(self):
         self.t = tempfile.TemporaryDirectory()
@@ -28,8 +34,8 @@ class AuditTests(unittest.TestCase):
                         {"hash": B, "stage": "pixel", "required": False}]
         self.rows = [{"hash": A, "stage": "vertex", "status": "ok", "spv_bytes": "20"},
                      {"hash": B, "stage": "fragment", "status": "ok", "spv_bytes": "20"}]
-        for h in (A, B):
-            (self.spv / (h + ".spv")).write_bytes(struct.pack("<5I", 0x07230203, 0x00010500, 0, 4, 0))
+        for h, model in ((A, 0), (B, 4)):
+            (self.spv / (h + ".spv")).write_bytes(spirv_module(model))
         self.save()
 
     def save(self):
@@ -80,6 +86,46 @@ class AuditTests(unittest.TestCase):
         self.save()
         with self.assertRaisesRegex(AuditError, "STAGE_MISMATCH"):
             self.run_audit()
+
+    def test_execution_model_mismatch(self):
+        (self.spv / (A + ".spv")).write_bytes(spirv_module(4))
+        self.assertEqual(self.run_audit()["failures"][0]["reason"],
+                         "SPIRV_EXECUTION_MODEL_MISMATCH")
+
+    def test_geometry_execution_model_is_blocked(self):
+        (self.spv / (A + ".spv")).write_bytes(spirv_module(3))
+        failure = self.run_audit()["failures"][0]
+        self.assertEqual(failure["reason"],
+                         "SPIRV_EXECUTION_MODEL_UNSUPPORTED_BY_RUNTIME")
+        self.assertEqual(failure["execution_model"], 3)
+
+    def test_entrypoint_missing(self):
+        (self.spv / (A + ".spv")).write_bytes(
+            struct.pack("<5I", 0x07230203, 0x00010500, 0, 2, 0)
+        )
+        self.rows[0]["spv_bytes"] = "20"
+        self.save()
+        self.assertEqual(self.run_audit()["failures"][0]["reason"],
+                         "SPIRV_ENTRY_POINT_MISSING")
+
+    def test_zero_instruction_word_count(self):
+        (self.spv / (A + ".spv")).write_bytes(
+            struct.pack("<6I", 0x07230203, 0x00010500, 0, 2, 0, 15)
+        )
+        self.rows[0]["spv_bytes"] = "24"
+        self.save()
+        self.assertEqual(self.run_audit()["failures"][0]["reason"],
+                         "SPIRV_INSTRUCTION_WORD_COUNT_ZERO")
+
+    def test_truncated_entrypoint_instruction(self):
+        (self.spv / (A + ".spv")).write_bytes(
+            struct.pack("<7I", 0x07230203, 0x00010500, 0, 2, 0,
+                        (4 << 16) | 15, 0)
+        )
+        self.rows[0]["spv_bytes"] = "28"
+        self.save()
+        self.assertEqual(self.run_audit()["failures"][0]["reason"],
+                         "SPIRV_INSTRUCTION_TRUNCATED")
 
     def test_fake_validator_failure(self):
         self.validator.write_text("#!/bin/sh\nexit 1\n")
