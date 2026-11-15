@@ -78,6 +78,7 @@ def provider_files(root):
         raise ValueError("provider_root_not_real_directory")
 
     found = []
+    skipped_symlinks = []
     walk_errors = []
 
     def record_walk_error(error):
@@ -87,13 +88,28 @@ def provider_files(root):
         root, topdown=True, followlinks=False, onerror=record_walk_error
     ):
         current_path = Path(current)
-        directories[:] = sorted(
-            name for name in directories
-            if not (current_path / name).is_symlink()
-        )
+        kept_directories = []
+        for name in sorted(directories):
+            path = current_path / name
+            if path.is_symlink():
+                # Do not follow an untrusted tree, but never call the scan
+                # complete when a subtree may contain SDK providers.
+                skipped_symlinks.append({
+                    "path": path.relative_to(root).as_posix(),
+                    "kind": "directory",
+                })
+            else:
+                kept_directories.append(name)
+        directories[:] = kept_directories
+
         for name in sorted(filenames):
             path = current_path / name
             if path.is_symlink():
+                if path.suffix.lower() in SUFFIXES or VERSIONED_SO.search(path.name):
+                    skipped_symlinks.append({
+                        "path": path.relative_to(root).as_posix(),
+                        "kind": "provider_file",
+                    })
                 continue
             if path.suffix.lower() in SUFFIXES or VERSIONED_SO.search(path.name):
                 if path.is_file():
@@ -101,7 +117,7 @@ def provider_files(root):
 
     if walk_errors:
         raise ValueError("provider_tree_walk_incomplete")
-    return found
+    return found, skipped_symlinks
 
 
 def _archive_member_suffix(origin, path):
@@ -128,10 +144,18 @@ def scan(data, roots, nm):
     unique_definitions = set()
     root_rows = []
 
+    skipped_provider_symlinks = []
+
     for label, root in roots:
         root = Path(root).absolute()
-        files = provider_files(root)
-        root_rows.append({"label": label, "library_count": len(files)})
+        files, skipped = provider_files(root)
+        root_rows.append({
+            "label": label,
+            "library_count": len(files),
+            "skipped_symlink_count": len(skipped),
+        })
+        for item in skipped:
+            skipped_provider_symlinks.append({"root": label, **item})
         for path in files:
             scanned += 1
             try:
@@ -232,7 +256,9 @@ def scan(data, roots, nm):
         "ambiguous_exact_names": ambiguous,
         "no_exact_name_provider": missing,
         "library_scan_errors": errors,
-        "all_provider_roots_scanned": not errors,
+        "provider_tree_symlink_count": len(skipped_provider_symlinks),
+        "provider_tree_symlinks": skipped_provider_symlinks,
+        "all_provider_roots_scanned": not errors and not skipped_provider_symlinks,
         "inputs_modified": False,
         "archives_extracted": False,
         "compilation_performed": False,
@@ -242,6 +268,7 @@ def scan(data, roots, nm):
             "Exact-name matches are candidates, not proof of ABI compatibility.",
             "No relocation, symbol-version, calling-convention, type-layout, or transitive-dependency validation.",
             "Multiple definitions inside one archive are reported as ambiguous by member identity.",
+            "Symlinked provider files and directory trees are not followed; any skipped provider symlink makes the scan incomplete.",
             "The report contains private mangled names and local paths; keep it private.",
         ],
     }
@@ -342,6 +369,7 @@ def main():
                         "no_provider_candidate_count"
                     ],
                     "library_scan_error_count": len(result["library_scan_errors"]),
+                    "provider_tree_symlink_count": result["provider_tree_symlink_count"],
                     "abi_compatibility_proven": False,
                     "report_path": str(destination),
                 },
