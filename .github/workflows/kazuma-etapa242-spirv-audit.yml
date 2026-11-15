@@ -14,5 +14,5 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
-      - name: Run ten synthetic tests (no game, no shader bytes)
+      - name: Run synthetic SPIR-V contract tests (no game, no shader bytes)
         run: python3 -m unittest discover -s tools/etapa242 -p 'test_*.py' -v
