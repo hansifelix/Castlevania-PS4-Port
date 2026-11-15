@@ -239,8 +239,10 @@ class ProviderAuditTests(unittest.TestCase):
 
     def test_symlinked_provider_tree_marks_scan_incomplete(self):
         with tempfile.TemporaryDirectory() as td:
-            root = Path(td)
-            target = root / "target"
+            base = Path(td)
+            root = base / "providers"
+            root.mkdir()
+            target = base / "outside-target"
             target.mkdir()
             (target / "hidden-provider.a").write_bytes(b"synthetic")
             alias = root / "provider-tree"
