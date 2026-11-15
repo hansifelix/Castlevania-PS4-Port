@@ -218,7 +218,7 @@ class ProviderAuditTests(unittest.TestCase):
             self.assertEqual(len(result["library_scan_errors"]), 1)
             self.assertEqual(result["exact_provider_candidate_count"], 0)
 
-    def test_ignores_symlink_files_and_directories(self):
+    def test_reports_symlink_provider_files_and_directories(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             real = root / "real"
@@ -227,11 +227,48 @@ class ProviderAuditTests(unittest.TestCase):
             (root / "alias.a").symlink_to(real / "inside.a")
             (root / "alias-dir").symlink_to(real, target_is_directory=True)
             (root / "libversioned.so.1").write_text("x")
-            found = provider_files(root)
+            found, skipped = provider_files(root)
             self.assertEqual(
                 [path.relative_to(root).as_posix() for path in found],
                 ["libversioned.so.1", "real/inside.a"],
             )
+            self.assertEqual(
+                {(row["path"], row["kind"]) for row in skipped},
+                {("alias.a", "provider_file"), ("alias-dir", "directory")},
+            )
+
+    def test_symlinked_provider_tree_marks_scan_incomplete(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            target = root / "target"
+            target.mkdir()
+            (target / "hidden-provider.a").write_bytes(b"synthetic")
+            alias = root / "provider-tree"
+            alias.symlink_to(target, target_is_directory=True)
+            regular = root / "regular.a"
+            regular.write_bytes(b"synthetic")
+
+            def fake(cmd, **kwargs):
+                return SimpleNamespace(
+                    returncode=0,
+                    stdout=f"{cmd[-1]}[member.o]: _ZprivateUnique T 0 8\n",
+                    stderr="",
+                )
+
+            with patch(
+                "tools.etapa90.private_aot_sdk_provider_audit.subprocess.run",
+                side_effect=fake,
+            ):
+                result = scan(inventory(), [("sdk", root)], "fake-nm")
+
+            self.assertEqual(result["exact_provider_candidate_count"], 1)
+            self.assertEqual(result["provider_tree_symlink_count"], 1)
+            self.assertEqual(
+                result["provider_tree_symlinks"],
+                [{"root": "sdk", "path": "provider-tree", "kind": "directory"}],
+            )
+            self.assertFalse(result["all_provider_roots_scanned"])
+            self.assertFalse(result["abi_compatibility_proven"])
 
     def test_preserves_existing_report(self):
         with tempfile.TemporaryDirectory() as td:
