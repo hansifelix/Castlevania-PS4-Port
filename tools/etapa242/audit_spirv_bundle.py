@@ -17,6 +17,8 @@ import sys
 SHA16 = re.compile(r"[0-9a-f]{16}\Z")
 OK = {"ok", "ok-retry"}
 MAGIC = 0x07230203
+MODEL_TO_STAGE = {0: "vertex", 1: "tess_control", 2: "tess_evaluation", 3: "geometry", 4: "fragment", 5: "compute"}
+SUPPORTED_RUNTIME_STAGES = {"vertex", "fragment", "compute"}
 
 
 class AuditError(Exception):
@@ -51,6 +53,36 @@ def read_results(path):
                 raise AuditError("DUPLICATE_OR_INVALID_TSV_HASH")
             result[key] = row
     return result
+
+
+def first_execution_model(path):
+    """Read the first OpEntryPoint model, matching the pinned runtime reflector."""
+    size = path.stat().st_size
+    with path.open("rb") as stream:
+        stream.seek(20)
+        offset = 20
+        while offset < size:
+            instruction = stream.read(4)
+            if len(instruction) != 4:
+                raise AuditError("SPIRV_INSTRUCTION_TRUNCATED")
+            word = struct.unpack("<I", instruction)[0]
+            word_count, opcode = word >> 16, word & 0xFFFF
+            if word_count == 0:
+                raise AuditError("SPIRV_INSTRUCTION_WORD_COUNT_ZERO")
+            payload_size = (word_count - 1) * 4
+            end = offset + 4 + payload_size
+            if end > size:
+                raise AuditError("SPIRV_INSTRUCTION_TRUNCATED")
+            if opcode == 15:  # OpEntryPoint
+                if word_count < 4:
+                    raise AuditError("SPIRV_ENTRY_POINT_MALFORMED")
+                payload = stream.read(payload_size)
+                if len(payload) != payload_size:
+                    raise AuditError("SPIRV_INSTRUCTION_TRUNCATED")
+                return struct.unpack_from("<I", payload, 0)[0]
+            stream.seek(payload_size, 1)
+            offset = end
+    raise AuditError("SPIRV_ENTRY_POINT_MISSING")
 
 
 def atomic_json(path, value):
@@ -99,6 +131,27 @@ def audit(inv, all_tsv, success_tsv, spv_root, validator):
             magic, version, _generator, bound, reserved = struct.unpack("<5I", stream.read(20))
         if magic != MAGIC or (version >> 16) != 1 or ((version >> 8) & 0xff) > 6 or (version & 0xff) != 0 or bound == 0 or reserved:
             failures.append({"hash": h, "reason": "SPV_HEADER_INVALID"})
+            continue
+        try:
+            model = first_execution_model(file)
+        except AuditError as error:
+            failures.append({"hash": h, "reason": str(error)})
+            continue
+        actual_stage = MODEL_TO_STAGE.get(model)
+        if actual_stage not in SUPPORTED_RUNTIME_STAGES:
+            failures.append({
+                "hash": h,
+                "reason": "SPIRV_EXECUTION_MODEL_UNSUPPORTED_BY_RUNTIME",
+                "execution_model": model,
+            })
+            continue
+        if actual_stage != expected_stage:
+            failures.append({
+                "hash": h,
+                "reason": "SPIRV_EXECUTION_MODEL_MISMATCH",
+                "expected_stage": expected_stage,
+                "actual_stage": actual_stage,
+            })
             continue
         try:
             proc = subprocess.run([str(validator), "--target-env", "vulkan1.2", str(file)],
