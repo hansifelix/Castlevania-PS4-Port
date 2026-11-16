@@ -84,6 +84,19 @@ class AbiEvidenceGateTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "count_mismatch"):
             validate_provider_scan(scan)
 
+    def test_symbol_cannot_appear_in_multiple_provider_groups(self):
+        scan = sample_scan()
+        scan["ambiguous_exact_names"]["_Zone"] = {
+            "providers": [p("sdk", "lib/x.a", "x1.o"), p("sdk", "lib/x.a", "x2.o")]
+        }
+        scan["ambiguous_provider_candidate_count"] = len(scan["ambiguous_exact_names"])
+        scan["aot_unresolved_symbol_count"] = (
+            len(scan["matched_exact_names"]) + len(scan["ambiguous_exact_names"])
+            + len(scan["no_exact_name_provider"])
+        )
+        with self.assertRaisesRegex(ValueError, "symbol_in_multiple_groups"):
+            validate_provider_scan(scan)
+
     def test_skipped_symlink_blocks_the_scan(self):
         scan = sample_scan()
         scan["provider_tree_symlink_count"] = 1
