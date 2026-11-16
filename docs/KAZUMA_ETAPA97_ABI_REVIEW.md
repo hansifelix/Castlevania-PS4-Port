@@ -57,4 +57,4 @@ Esse status **não** significa ABI provada, não autoriza o linker e não gera E
 
 Nomes mangled, caminhos privados, hashes de headers e relatórios completos devem permanecer fora do repositório, chat e artefatos públicos. A CI usa apenas fixtures sintéticas e headers temporários; não valida os binários privados do projeto.
 
-A bateria cobre integridade do relatório de provedores, hashes do header e da declaração, membros ambíguos, ausência de candidato, revisões faltantes, timestamps com fuso e a regra de nunca autorizar link.
+A bateria cobre integridade do relatório de provedores, símbolos em categorias conflitantes, hashes do header e da declaração, membros ambíguos, ausência de candidato, revisões faltantes, timestamps com fuso e a regra de nunca autorizar link.
