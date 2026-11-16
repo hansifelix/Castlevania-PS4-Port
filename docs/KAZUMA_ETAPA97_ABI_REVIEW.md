@@ -53,6 +53,12 @@ O status `ABI_EVIDENCE_REVIEW_COMPLETE_NOT_LINK_PROOF` exige:
 
 Esse status **não** significa ABI provada, não autoriza o linker e não gera ELF executável, EBOOT, PKG ou instalação. A ferramenta registra explicitamente `abi_compatibility_proven=false` e `link_authorized=false`; o conteúdo dos campos ainda depende da veracidade da análise humana. Mesmo um pacote completo deve ser seguido por revisão independente do contrato e por um link controlado, sem stubs falsos.
 
+## Evidência privada suplementar — SDK (16/11/2026)
+
+Foi recuperado um pacote privado complementar com os três objetos SDK que faltavam no relatório anterior. A auditoria local confirmou integridade do TAR.GZ, correspondência dos três SHA-256 do manifesto e cabeçalhos ELF64 little-endian ET_REL para x86-64. O manifesto identifica OpenOrbis v0.5.4 / Clang 18 e a mesma origem AOT previamente registrada.
+
+Somado aos 133 objetos SDK já verificados nos lotes privados anteriores, o conjunto estrutural do SDK fica em **136/136**. Isso fecha somente a presença/integridade estrutural dos objetos; não demonstra ABI, não substitui a varredura Etapa 96 dos provedores SDK/runtime e não autoriza link.
+
 ## Privacidade e testes
 
 Nomes mangled, caminhos privados, hashes de headers e relatórios completos devem permanecer fora do repositório, chat e artefatos públicos. A CI usa apenas fixtures sintéticas e headers temporários; não valida os binários privados do projeto.
