@@ -82,6 +82,14 @@ def validate_provider_scan(scan: dict) -> tuple[dict, list[str]]:
         if type(scan.get(key)) is not int or scan[key] != expected:
             raise ValueError("provider_scan_count_mismatch")
 
+    groups = (set(matched), set(ambiguous), set(missing))
+    if (
+        groups[0].intersection(groups[1])
+        or groups[0].intersection(groups[2])
+        or groups[1].intersection(groups[2])
+    ):
+        raise ValueError("provider_scan_symbol_in_multiple_groups")
+
     candidates = {}
     for group, data in (("matched", matched), ("ambiguous", ambiguous)):
         for symbol, item in data.items():
