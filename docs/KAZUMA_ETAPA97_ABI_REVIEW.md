@@ -67,7 +67,7 @@ Uma auditoria local somente-leitura dos pacotes privados do Dropbox reconstruiu 
 - **1.916/1.916 objetos** ELF64 little-endian ET_REL x86-64; zero índices ausentes, duplicados ou objetos inválidos.
 - Todos os hashes de objetos conferem com seus manifests; zero falhas de leitura ou divergências.
 - 101 nomes de símbolos têm definições duplicadas, cobrindo 16.602 localizações; os metadados de binding/tipo/visibilidade estão completos.
-- No inventário AOT, 39 nomes indefinidos não têm definição interna; 99.972 nomes indefinidos têm pelo menos um candidato AOT por nome exato.
+- No inventário AOT, 39 nomes indefinidos não têm definição interna, cobrindo 14.174 referências consumidor-objeto-símbolo: 8 da categoria nx_runtime, 23 C++ ABI, 6 libm e 2 compiler runtime. Outros 99.972 nomes indefinidos têm pelo menos um candidato AOT por nome exato.
 
 O relatório completo contém nomes mangled e permanece apenas no ambiente privado; nada disso foi publicado. Este resultado reconstitui a Etapa 91, mas **não substitui a varredura Etapa 96**: ainda falta comparar esses 39 nomes com as bibliotecas OpenOrbis v0.5.4 e os objetos reais do runtime PS4. Correspondência de nome não prova ABI.
 
