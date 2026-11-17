@@ -36,7 +36,7 @@ class AuditTests(unittest.TestCase):
         self.spv = self.root / "spv"
         self.spv.mkdir()
         self.validator = self.root / "spirv-val"
-        self.validator.write_text("#!/bin/sh\\n[ \\"$1\\" = '--target-env' ] && [ \\"$2\\" = 'vulkan1.2' ]\\n")
+        self.validator.write_text("#!/bin/sh\n[ \"$1\" = '--target-env' ] && [ \"$2\" = 'vulkan1.2' ]\n")
         self.validator.chmod(0o700)
         self.records = [{"hash": A, "stage": "vertex", "required": True},
                         {"hash": B, "stage": "pixel", "required": False}]
@@ -50,7 +50,7 @@ class AuditTests(unittest.TestCase):
         self.inv.write_text(json.dumps({"programs": self.records}))
         for p, rows in ((self.all, self.rows), (self.ok, [r for r in self.rows if r["status"] in {"ok", "ok-retry"}])):
             with p.open("w", newline="") as f:
-                w = csv.DictWriter(f, fieldnames=FIELDS, delimiter="\\t")
+                w = csv.DictWriter(f, fieldnames=FIELDS, delimiter="\t")
                 w.writeheader(); w.writerows(rows)
 
     def run_audit(self):
@@ -158,7 +158,7 @@ class AuditTests(unittest.TestCase):
                          "SPIRV_INSTRUCTION_TRUNCATED")
 
     def test_fake_validator_failure(self):
-        self.validator.write_text("#!/bin/sh\\nexit 1\\n")
+        self.validator.write_text("#!/bin/sh\nexit 1\n")
         self.assertEqual(self.run_audit()["status"], "BLOCKED")
 
     def test_spv_symlink(self):
