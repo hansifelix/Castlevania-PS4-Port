@@ -1,0 +1,27 @@
+name: Kazuma 251 - real SPIR-V Tools integration (synthetic modules only)
+
+on:
+  pull_request:
+    paths:
+      - 'tools/etapa242/**'
+      - 'tools/etapa251/**'
+      - '.github/workflows/kazuma-etapa251-real-spirv-tools.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  real-spirv-validator:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run existing parser contract regressions
+        run: python3 -m unittest discover -s tools/etapa242 -p 'test_*.py' -v
+      - name: Install distribution SPIRV-Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y spirv-tools
+      - name: Assemble and validate synthetic Vulkan 1.2 modules
+        run: bash tools/etapa251/test_real_spirv_tools.sh
