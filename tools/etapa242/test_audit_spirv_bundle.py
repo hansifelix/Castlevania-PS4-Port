@@ -17,6 +17,14 @@ def spirv_module(model):
                        (4 << 16) | 15, model, 1, 0x0000006D)
 
 
+def spirv_module_with_entrypoints(*models):
+    # Preserve declaration order: the upstream reflector consumes the first entrypoint.
+    words = [0x07230203, 0x00010500, 0, len(models) + 1, 0]
+    for ident, model in enumerate(models, start=1):
+        words.extend([(4 << 16) | 15, model, ident, 0x0000006D])
+    return struct.pack("<" + "I" * len(words), *words)
+
+
 class AuditTests(unittest.TestCase):
     def setUp(self):
         self.t = tempfile.TemporaryDirectory()
@@ -28,7 +36,7 @@ class AuditTests(unittest.TestCase):
         self.spv = self.root / "spv"
         self.spv.mkdir()
         self.validator = self.root / "spirv-val"
-        self.validator.write_text("#!/bin/sh\n[ \"$1\" = '--target-env' ] && [ \"$2\" = 'vulkan1.2' ]\n")
+        self.validator.write_text("#!/bin/sh\\n[ \\"$1\\" = '--target-env' ] && [ \\"$2\\" = 'vulkan1.2' ]\\n")
         self.validator.chmod(0o700)
         self.records = [{"hash": A, "stage": "vertex", "required": True},
                         {"hash": B, "stage": "pixel", "required": False}]
@@ -42,7 +50,7 @@ class AuditTests(unittest.TestCase):
         self.inv.write_text(json.dumps({"programs": self.records}))
         for p, rows in ((self.all, self.rows), (self.ok, [r for r in self.rows if r["status"] in {"ok", "ok-retry"}])):
             with p.open("w", newline="") as f:
-                w = csv.DictWriter(f, fieldnames=FIELDS, delimiter="\t")
+                w = csv.DictWriter(f, fieldnames=FIELDS, delimiter="\\t")
                 w.writeheader(); w.writerows(rows)
 
     def run_audit(self):
@@ -94,6 +102,26 @@ class AuditTests(unittest.TestCase):
         self.assertEqual(self.run_audit()["failures"][0]["reason"],
                          "SPIRV_EXECUTION_MODEL_MISMATCH")
 
+    def test_first_entrypoint_controls_stage(self):
+        module = spirv_module_with_entrypoints(4, 0)  # Fragment first, Vertex second.
+        (self.spv / (A + ".spv")).write_bytes(module)
+        self.rows[0]["spv_bytes"] = str(len(module))
+        self.save()
+        failure = self.run_audit()["failures"][0]
+        self.assertEqual(failure["reason"], "SPIRV_EXECUTION_MODEL_MISMATCH")
+        self.assertEqual(failure["expected_stage"], "vertex")
+        self.assertEqual(failure["actual_stage"], "fragment")
+
+    def test_unsupported_first_entrypoint_blocks_later_supported_one(self):
+        module = spirv_module_with_entrypoints(3, 0)  # Geometry first, Vertex second.
+        (self.spv / (A + ".spv")).write_bytes(module)
+        self.rows[0]["spv_bytes"] = str(len(module))
+        self.save()
+        failure = self.run_audit()["failures"][0]
+        self.assertEqual(failure["reason"],
+                         "SPIRV_EXECUTION_MODEL_UNSUPPORTED_BY_RUNTIME")
+        self.assertEqual(failure["execution_model"], 3)
+
     def test_geometry_execution_model_is_blocked(self):
         (self.spv / (A + ".spv")).write_bytes(spirv_module(3))
         failure = self.run_audit()["failures"][0]
@@ -130,7 +158,7 @@ class AuditTests(unittest.TestCase):
                          "SPIRV_INSTRUCTION_TRUNCATED")
 
     def test_fake_validator_failure(self):
-        self.validator.write_text("#!/bin/sh\nexit 1\n")
+        self.validator.write_text("#!/bin/sh\\nexit 1\\n")
         self.assertEqual(self.run_audit()["status"], "BLOCKED")
 
     def test_spv_symlink(self):
