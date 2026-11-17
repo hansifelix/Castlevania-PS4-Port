@@ -59,6 +59,18 @@ Foi recuperado um pacote privado complementar com os três objetos SDK que falta
 
 Somado aos 133 objetos SDK já verificados nos lotes privados anteriores, o conjunto estrutural do SDK fica em **136/136**. Isso fecha somente a presença/integridade estrutural dos objetos; não demonstra ABI, não substitui a varredura Etapa 96 dos provedores SDK/runtime e não autoriza link.
 
+## Etapa 91 — inventário privado recomposto (16/11/2026)
+
+Uma auditoria local somente-leitura dos pacotes privados do Dropbox reconstruiu o inventário dos três módulos:
+
+- 319 pacotes: 285 MAIN, 24 SDK e 10 subsdk0.
+- **1.916/1.916 objetos** ELF64 little-endian ET_REL x86-64; zero índices ausentes, duplicados ou objetos inválidos.
+- Todos os hashes de objetos conferem com seus manifests; zero falhas de leitura ou divergências.
+- 101 nomes de símbolos têm definições duplicadas, cobrindo 16.602 localizações; os metadados de binding/tipo/visibilidade estão completos.
+- No inventário AOT, 39 nomes indefinidos não têm definição interna; 99.972 nomes indefinidos têm pelo menos um candidato AOT por nome exato.
+
+O relatório completo contém nomes mangled e permanece apenas no ambiente privado; nada disso foi publicado. Este resultado reconstitui a Etapa 91, mas **não substitui a varredura Etapa 96**: ainda falta comparar esses 39 nomes com as bibliotecas OpenOrbis v0.5.4 e os objetos reais do runtime PS4. Correspondência de nome não prova ABI.
+
 ## Privacidade e testes
 
 Nomes mangled, caminhos privados, hashes de headers e relatórios completos devem permanecer fora do repositório, chat e artefatos públicos. A CI usa apenas fixtures sintéticas e headers temporários; não valida os binários privados do projeto.
