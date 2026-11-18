@@ -213,8 +213,9 @@ jobs:
           scanner_rc=$?
           set -e
           test "$scanner_rc" -le 1
-          python3 - "$RUNNER_TEMP/provider-diagnostic/scan.json" "$scanner_rc" <<'PY_DIAG'
-          import json, sys
+          python3 - "$GITHUB_WORKSPACE/.scan-output/scan.json" "$scanner_rc" <<'PY_DIAG'
+          import hashlib, json, os, subprocess, sys
+          from pathlib import Path
           data=json.load(open(sys.argv[1], encoding="utf-8"))
           errors=data.get("library_scan_errors", [])
           symlinks=data.get("provider_tree_symlinks", [])
@@ -222,8 +223,24 @@ jobs:
           print("KAZUMA_PROVIDER_SCAN_LIBRARY_ERRORS=" + str(len(errors)))
           print("KAZUMA_PROVIDER_SCAN_SYMLINKS=" + str(len(symlinks)))
           print("KAZUMA_PROVIDER_SCAN_SYNTHETIC_MISSING=" + str(data.get("no_provider_candidate_count")))
+          roots={"openorbis": Path(os.environ["KAZUMA_SDK"])/"lib",
+                 "runtime": Path(os.environ["RUNNER_TEMP"])/"public-objects"}
           for row in errors:
-              print("KAZUMA_PROVIDER_SCAN_ERROR root=" + row.get("root","?") + " path=" + row.get("path","?") + " code=" + row.get("error","?"))
+              label=row.get("root","?")
+              rel=row.get("path","?")
+              path=roots.get(label, Path("/nonexistent"))/rel
+              kind=subprocess.run(["file","-b",str(path)],capture_output=True,text=True).stdout.strip()
+              probe=subprocess.run(["llvm-nm-18","-A","-g","--defined-only","--format=posix",str(path)],
+                                   capture_output=True,text=True,timeout=120)
+              stderr=probe.stderr.strip()
+              stderr_class=("EMPTY" if not stderr else
+                            "NO_SYMBOLS_ONLY" if all(x=="no symbols" or x.endswith(": no symbols") for x in stderr.splitlines() if x.strip())
+                            else "OTHER_DIAGNOSTIC")
+              print("KAZUMA_PROVIDER_SCAN_ERROR root="+label+" path="+rel+
+                    " code="+row.get("error","?")+" file_type="+kind+
+                    " nm_rc="+str(probe.returncode)+" stderr_class="+stderr_class+
+                    " stderr_sha256="+hashlib.sha256(stderr.encode()).hexdigest()+
+                    " stderr_preview="+stderr[:240].replace("\n"," | "))
           assert data.get("aot_unresolved_symbol_count") == 1
           assert data.get("no_provider_candidate_count") == 1
           assert data.get("abi_compatibility_proven") is False
