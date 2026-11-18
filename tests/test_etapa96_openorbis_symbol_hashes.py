@@ -51,7 +51,7 @@ class OpenOrbisHashExportTests(unittest.TestCase):
             make_archive(archive, [("lib/libexample.a", b"synthetic archive bytes")])
             digest = sha256_file(archive)
             root = base / "lib"
-            self.assertEqual(extract_openorbis_lib(archive, root), 1)
+            self.assertEqual(extract_openorbis_lib(archive, root, expected_sha256=digest), 1)
             nm = fake_nm(base / "fake-nm")
             report = build_symbol_hash_manifest(root, str(nm), digest)
 
@@ -84,8 +84,9 @@ class OpenOrbisHashExportTests(unittest.TestCase):
             base = Path(temp)
             archive = base / "toolchain.tar.gz"
             make_archive(archive, [("lib/../../escape.a", b"x")])
+            digest = sha256_file(archive)
             with self.assertRaisesRegex(AuditError, "SDK_ARCHIVE_UNSAFE_PATH"):
-                extract_openorbis_lib(archive, base / "lib")
+                extract_openorbis_lib(archive, base / "lib", expected_sha256=digest)
 
     def test_symlink_escape_in_sdk_archive_is_rejected(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -96,8 +97,9 @@ class OpenOrbisHashExportTests(unittest.TestCase):
                 info.type = tarfile.SYMTYPE
                 info.linkname = "../../outside.so"
                 bundle.addfile(info)
+            digest = sha256_file(archive)
             with self.assertRaisesRegex(AuditError, "SDK_LIB_LINK_ESCAPES_ROOT"):
-                extract_openorbis_lib(archive, base / "lib")
+                extract_openorbis_lib(archive, base / "lib", expected_sha256=digest)
 
     def test_internal_symlink_alias_is_resolved_once(self):
         with tempfile.TemporaryDirectory() as temp:
