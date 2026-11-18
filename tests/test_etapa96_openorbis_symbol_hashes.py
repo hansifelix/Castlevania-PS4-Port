@@ -48,7 +48,7 @@ class OpenOrbisHashExportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)
             archive = base / "toolchain.tar.gz"
-            make_archive(archive, [("lib/libexample.a", b"synthetic archive bytes")])
+            make_archive(archive, [("toolchain-llvm-18/include/orbis/kernel.h", b"header"), ("toolchain-llvm-18/lib/libexample.a", b"synthetic archive bytes")])
             digest = sha256_file(archive)
             root = base / "lib"
             self.assertEqual(extract_openorbis_lib(archive, root, expected_sha256=digest), 1)
@@ -83,7 +83,7 @@ class OpenOrbisHashExportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             base = Path(temp)
             archive = base / "toolchain.tar.gz"
-            make_archive(archive, [("lib/../../escape.a", b"x")])
+            make_archive(archive, [("include/header.h", b"h"), ("lib/../../escape.a", b"x")])
             digest = sha256_file(archive)
             with self.assertRaisesRegex(AuditError, "SDK_ARCHIVE_UNSAFE_PATH"):
                 extract_openorbis_lib(archive, base / "lib", expected_sha256=digest)
@@ -93,6 +93,9 @@ class OpenOrbisHashExportTests(unittest.TestCase):
             base = Path(temp)
             archive = base / "toolchain.tar.gz"
             with tarfile.open(archive, "w:gz") as bundle:
+                header = tarfile.TarInfo("include/header.h")
+                header.size = 1
+                bundle.addfile(header, io.BytesIO(b"h"))
                 info = tarfile.TarInfo("lib/escape.so")
                 info.type = tarfile.SYMTYPE
                 info.linkname = "../../outside.so"
