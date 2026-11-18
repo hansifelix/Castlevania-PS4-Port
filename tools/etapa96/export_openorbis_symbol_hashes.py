@@ -77,7 +77,7 @@ def _link_target(member_name: str, link_name: str, hardlink: bool) -> PurePosixP
     return PurePosixPath(*target.parts[1:])
 
 
-def extract_openorbis_lib(archive: Path, destination: Path) -> int:
+def extract_openorbis_lib(archive: Path, destination: Path, expected_sha256: str = SDK_SHA256) -> int:
     archive = Path(archive).absolute()
     destination = Path(destination).absolute()
     if _has_symlink_component(archive) or not archive.is_file():
@@ -86,7 +86,7 @@ def extract_openorbis_lib(archive: Path, destination: Path) -> int:
         raise AuditError("SDK_DESTINATION_NOT_SAFE")
     if destination.exists() and any(destination.iterdir()):
         raise AuditError("SDK_DESTINATION_NOT_EMPTY")
-    if sha256_file(archive) != SDK_SHA256:
+    if sha256_file(archive) != expected_sha256:
         raise AuditError("SDK_ARCHIVE_SHA256_MISMATCH")
 
     destination.mkdir(parents=True, exist_ok=True)
