@@ -39,6 +39,15 @@ def complete(data):
     )
 
 
+def is_no_symbols_diagnostic(text):
+    """Recognize only nm's benign empty-object diagnostic; all other stderr fails closed."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    return bool(lines) and all(
+        line == "no symbols" or line.endswith(": no symbols")
+        for line in lines
+    )
+
+
 def parse_nm_records(text):
     """Return (origin, symbol, kind); origin retains archive-member identity."""
     out = []
@@ -170,7 +179,7 @@ def scan(data, roots, nm):
                 )
                 if process.returncode:
                     raise RuntimeError("nm_failed")
-                if process.stderr.strip():
+                if process.stderr.strip() and not is_no_symbols_diagnostic(process.stderr):
                     raise RuntimeError("nm_emitted_stderr")
                 rows = parse_nm_records(process.stdout)
                 symbols += len(rows)
