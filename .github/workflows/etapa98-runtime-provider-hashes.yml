@@ -169,6 +169,69 @@ jobs:
           print("KAZUMA_ETAPA98_HASH_ONLY_MANIFEST=PASS")
           PY
 
+      - name: Diagnosticar completude do scanner com inventario sintetico
+        shell: bash
+        run: |
+          set -euo pipefail
+          scanner_commit="0cf3937ad0b94ef5b44fc3d0fa2fb3060956f45b"
+          git clone -q --filter=blob:none --no-checkout \
+            https://github.com/hansifelix/Castlevania-PS4-Port.git \
+            "$RUNNER_TEMP/audit-tools"
+          git -C "$RUNNER_TEMP/audit-tools" fetch -q --depth 1 origin "$scanner_commit"
+          git -C "$RUNNER_TEMP/audit-tools" sparse-checkout init --cone
+          git -C "$RUNNER_TEMP/audit-tools" sparse-checkout set tools/etapa90
+          git -C "$RUNNER_TEMP/audit-tools" checkout -q --detach "$scanner_commit"
+
+          cat > "$RUNNER_TEMP/synthetic-inventory.json" <<'JSON'
+          {
+            "audit_mode": "READ_ONLY_SYMBOL_TABLE_PARSE_NO_EXTRACT_NO_COMPILE_NO_LINK",
+            "root_name": "synthetic-provider-diagnostic",
+            "index_coverage_complete": true,
+            "duplicate_metadata_complete": true,
+            "invalid_objects": [],
+            "private_symbol_names_in_report": true,
+            "files_extracted": false,
+            "compilation_performed": false,
+            "link_performed": false,
+            "totals": {
+              "object_copies_parsed": 1,
+              "undefined_symbols_without_provider_in_aot_inventory": 1
+            },
+            "undefined_without_aot_provider": {
+              "__kazuma_synthetic_provider_probe_20261118__": ["main:0"]
+            }
+          }
+          JSON
+          mkdir -p "$RUNNER_TEMP/provider-diagnostic"
+          set +e
+          python3 "$RUNNER_TEMP/audit-tools/tools/etapa90/private_aot_sdk_provider_audit.py" \
+            --inventory "$RUNNER_TEMP/synthetic-inventory.json" \
+            --provider-root "openorbis=$KAZUMA_SDK/lib" \
+            --provider-root "runtime=$RUNNER_TEMP/public-objects" \
+            --nm llvm-nm-18 \
+            --report "$RUNNER_TEMP/provider-diagnostic/scan.json"
+          scanner_rc=$?
+          set -e
+          test "$scanner_rc" -le 1
+          python3 - "$RUNNER_TEMP/provider-diagnostic/scan.json" "$scanner_rc" <<'PY_DIAG'
+          import json, sys
+          data=json.load(open(sys.argv[1], encoding="utf-8"))
+          errors=data.get("library_scan_errors", [])
+          symlinks=data.get("provider_tree_symlinks", [])
+          print("KAZUMA_PROVIDER_SCAN_DIAGNOSTIC=" + ("COMPLETE" if data.get("all_provider_roots_scanned") else "INCOMPLETE"))
+          print("KAZUMA_PROVIDER_SCAN_LIBRARY_ERRORS=" + str(len(errors)))
+          print("KAZUMA_PROVIDER_SCAN_SYMLINKS=" + str(len(symlinks)))
+          print("KAZUMA_PROVIDER_SCAN_SYNTHETIC_MISSING=" + str(data.get("no_provider_candidate_count")))
+          for row in errors:
+              print("KAZUMA_PROVIDER_SCAN_ERROR root=" + row.get("root","?") + " path=" + row.get("path","?") + " code=" + row.get("error","?"))
+          assert data.get("aot_unresolved_symbol_count") == 1
+          assert data.get("no_provider_candidate_count") == 1
+          assert data.get("abi_compatibility_proven") is False
+          assert data.get("link_performed") is False
+          if errors or symlinks or not data.get("all_provider_roots_scanned"):
+              raise SystemExit(1)
+          PY_DIAG
+
       - uses: actions/upload-artifact@v4
         with:
           name: public-runtime-provider-hashes
