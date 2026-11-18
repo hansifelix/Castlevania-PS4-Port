@@ -209,7 +209,7 @@ jobs:
             --provider-root "openorbis=$KAZUMA_SDK/lib" \
             --provider-root "runtime=$RUNNER_TEMP/public-objects" \
             --nm llvm-nm-18 \
-            --report "$RUNNER_TEMP/provider-diagnostic/scan.json"
+            --report "$GITHUB_WORKSPACE/.scan-output/scan.json"
           scanner_rc=$?
           set -e
           test "$scanner_rc" -le 1
