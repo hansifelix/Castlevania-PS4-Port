@@ -54,6 +54,6 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: openorbis-v054-symbol-hashes
-          path: \${{ runner.temp }}/out/openorbis-v054-symbol-hashes.json
+          path: ${{ runner.temp }}/out/openorbis-v054-symbol-hashes.json
           if-no-files-found: error
           retention-days: 7
