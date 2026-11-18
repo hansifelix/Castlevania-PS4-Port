@@ -204,7 +204,7 @@ class ProviderAuditTests(unittest.TestCase):
                 return SimpleNamespace(
                     returncode=0,
                     stdout="",
-                    stderr=f"{cmd[-1]}: no symbols\\n",
+                    stderr=f"{cmd[-1]}: no symbols\n",
                 )
 
             with patch(
