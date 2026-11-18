@@ -1,0 +1,59 @@
+name: Etapa 96 - OpenOrbis v0.5.4 symbol hashes
+
+on:
+  push:
+    branches:
+      - kazuma-etapa96-sdk-provider-audit-20261114
+    paths:
+      - "tools/etapa90/private_aot_sdk_provider_audit.py"
+      - "tools/etapa96/export_openorbis_symbol_hashes.py"
+      - "tests/test_etapa96_openorbis_symbol_hashes.py"
+      - ".github/workflows/etapa96-openorbis-symbol-hashes.yml"
+  pull_request:
+    paths:
+      - "tools/etapa90/private_aot_sdk_provider_audit.py"
+      - "tools/etapa96/export_openorbis_symbol_hashes.py"
+      - "tests/test_etapa96_openorbis_symbol_hashes.py"
+      - ".github/workflows/etapa96-openorbis-symbol-hashes.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  openorbis-symbol-hashes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Testar exportador com fixtures sintéticas
+        run: |
+          python3 -m unittest discover -v -s tests -p 'test_etapa96_openorbis_symbol_hashes.py'
+
+      - name: Baixar OpenOrbis v0.5.4 e conferir SHA-256
+        env:
+          SDK_URL: https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz
+          SDK_SHA256: 3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --retry-delay 2 --connect-timeout 20 --max-time 300 \
+            "$SDK_URL" -o "$RUNNER_TEMP/toolchain-llvm-18.tar.gz"
+          printf '%s  %s\n' "$SDK_SHA256" "$RUNNER_TEMP/toolchain-llvm-18.tar.gz" | sha256sum -c -
+
+      - name: Exportar somente hashes de nomes de símbolos
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/openorbis-lib" "$RUNNER_TEMP/out"
+          python3 tools/etapa96/export_openorbis_symbol_hashes.py \
+            --archive "$RUNNER_TEMP/toolchain-llvm-18.tar.gz" \
+            --extract-root "$RUNNER_TEMP/openorbis-lib" \
+            --nm nm \
+            --output "$RUNNER_TEMP/out/openorbis-v054-symbol-hashes.json"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openorbis-v054-symbol-hashes
+          path: \${{ runner.temp }}/out/openorbis-v054-symbol-hashes.json
+          if-no-files-found: error
+          retention-days: 7
