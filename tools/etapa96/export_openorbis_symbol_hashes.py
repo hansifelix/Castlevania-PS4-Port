@@ -20,6 +20,7 @@ sys.path.insert(0, str(ROOT))
 from tools.etapa90.private_aot_sdk_provider_audit import (  # noqa: E402
     _archive_member_suffix,
     _has_symlink_component,
+    is_no_symbols_diagnostic,
     parse_nm_records,
 )
 
@@ -280,7 +281,7 @@ def build_symbol_hash_manifest(root: Path, nm: str, archive_sha256: str):
             )
         except (OSError, subprocess.TimeoutExpired):
             raise AuditError("NM_EXECUTION_FAILED") from None
-        if process.returncode != 0 or process.stderr.strip():
+        if process.returncode != 0 or (process.stderr.strip() and not is_no_symbols_diagnostic(process.stderr)):
             detail = process.stderr.strip().splitlines()[0] if process.stderr.strip() else ""
             detail = detail.replace(str(path), "<provider>").replace(str(path.resolve()), "<provider>")
             print(
