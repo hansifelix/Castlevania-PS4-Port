@@ -33,6 +33,8 @@ if mode == "fail":
     raise SystemExit(1)
 if mode == "malformed":
     print("not an nm posix record")
+elif mode == "mixed" and path.endswith("libempty.o"):
+    print(f"{{path}}: no symbols", file=sys.stderr)
 else:
     print(f"{{path}}[one.o]: _ZfakeA T 00000000 4")
     print(f"{{path}}[two.o]: _ZfakeA T 00000000 4")
@@ -127,6 +129,21 @@ class OpenOrbisHashExportTests(unittest.TestCase):
             (root / "alias.so").symlink_to(outside)
             with self.assertRaisesRegex(AuditError, "SDK_LIB_SYMLINK_ESCAPES_ROOT"):
                 collect_provider_files(root)
+
+    def test_empty_sdk_object_diagnostic_is_benign(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            root = base / "lib"
+            root.mkdir()
+            (root / "crtn.o").write_bytes(b"empty startup object")
+            (root / "libexample.a").write_bytes(b"synthetic archive")
+            report = build_symbol_hash_manifest(
+                root, str(fake_nm(base / "nm-mixed", "mixed")), "a" * 64
+            )
+            self.assertTrue(report["scan_complete"])
+            self.assertEqual(report["provider_file_count"], 2)
+            self.assertEqual(report["unique_symbol_hash_count"], 2)
+            self.assertEqual(report["provider_symlink_aliases_resolved"], 0)
 
     def test_nm_failure_and_malformed_output_fail_closed(self):
         with tempfile.TemporaryDirectory() as temp:
