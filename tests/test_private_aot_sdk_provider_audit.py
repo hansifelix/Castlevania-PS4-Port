@@ -195,6 +195,29 @@ class ProviderAuditTests(unittest.TestCase):
             self.assertEqual(result["exact_provider_candidate_count"], 1)
             self.assertEqual(result["ambiguous_provider_candidate_count"], 0)
 
+    def test_no_symbols_stderr_is_benign_and_scan_complete(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "crtn.o").write_bytes(b"synthetic empty startup object")
+
+            def fake(cmd, **kwargs):
+                return SimpleNamespace(
+                    returncode=0,
+                    stdout="",
+                    stderr=f"{cmd[-1]}: no symbols\\n",
+                )
+
+            with patch(
+                "tools.etapa90.private_aot_sdk_provider_audit.subprocess.run",
+                side_effect=fake,
+            ):
+                result = scan(inventory(), [("sdk", root)], "fake-nm")
+
+            self.assertTrue(result["all_provider_roots_scanned"])
+            self.assertEqual(result["library_scan_errors"], [])
+            self.assertEqual(result["defined_nm_entries_seen"], 0)
+            self.assertEqual(result["no_provider_candidate_count"], 4)
+
     def test_rejects_nm_stderr_as_incomplete_scan(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
