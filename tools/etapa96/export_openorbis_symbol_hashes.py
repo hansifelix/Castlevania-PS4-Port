@@ -281,6 +281,11 @@ def build_symbol_hash_manifest(root: Path, nm: str, archive_sha256: str):
         except (OSError, subprocess.TimeoutExpired):
             raise AuditError("NM_EXECUTION_FAILED") from None
         if process.returncode != 0 or process.stderr.strip():
+            print(
+                f"OPENORBIS_NM_PROVIDER_FAILURE_FILE={path.name} "
+                f"RC={process.returncode} STDERR_NONEMPTY={bool(process.stderr.strip())}",
+                file=sys.stderr,
+            )
             raise AuditError("NM_PROVIDER_SCAN_FAILED")
         try:
             rows = parse_nm_records(process.stdout)
