@@ -54,27 +54,64 @@ def is_provider_name(name: str) -> bool:
     )
 
 
-def _lib_member_path(name: str):
+def _archive_parts(name: str):
     path = PurePosixPath(name)
     if path.is_absolute() or ".." in path.parts:
         raise AuditError("SDK_ARCHIVE_UNSAFE_PATH")
-    parts = tuple(part for part in path.parts if part not in ("", "."))
-    if not parts or parts[0] != "lib":
+    return tuple(part for part in path.parts if part not in ("", "."))
+
+
+def _find_sdk_prefix(members):
+    paths = set()
+    for member in members:
+        parts = _archive_parts(member.name)
+        if not parts:
+            continue
+        paths.add(parts)
+        for index in range(1, len(parts)):
+            paths.add(parts[:index])
+
+    candidates = set()
+    for parts in paths:
+        for index, part in enumerate(parts):
+            if part != "lib":
+                continue
+            prefix = parts[:index]
+            lib_marker = prefix + ("lib",)
+            include_marker = prefix + ("include",)
+            has_lib = any(path[:len(lib_marker)] == lib_marker for path in paths)
+            has_include = any(path[:len(include_marker)] == include_marker for path in paths)
+            if has_lib and has_include:
+                candidates.add(prefix)
+
+    if not candidates:
+        raise AuditError("SDK_LAYOUT_WITH_INCLUDE_AND_LIB_NOT_FOUND")
+    shortest_depth = min(len(prefix) for prefix in candidates)
+    shortest = [prefix for prefix in candidates if len(prefix) == shortest_depth]
+    if len(shortest) != 1:
+        raise AuditError("SDK_LAYOUT_AMBIGUOUS")
+    return shortest[0]
+
+
+def _lib_member_path(name: str, sdk_prefix):
+    parts = _archive_parts(name)
+    marker = sdk_prefix + ("lib",)
+    if parts[:len(marker)] != marker:
         return None
-    return PurePosixPath(*parts[1:])
+    return PurePosixPath(*parts[len(marker):])
 
 
-def _link_target(member_name: str, link_name: str, hardlink: bool) -> PurePosixPath:
+def _link_target(member_parts, link_name: str, hardlink: bool, sdk_prefix):
     link = PurePosixPath(link_name)
     if link.is_absolute() or "\x00" in link_name:
         raise AuditError("SDK_LIB_LINK_UNSAFE")
-    member = PurePosixPath(member_name)
-    combined = link if hardlink else PurePosixPath(*member.parts[:-1], *link.parts)
+    combined = link if hardlink else PurePosixPath(*member_parts[:-1], *link.parts)
     normalized = posixpath.normpath(str(combined))
     target = PurePosixPath(normalized)
-    if target.is_absolute() or ".." in target.parts or not target.parts or target.parts[0] != "lib":
+    marker = sdk_prefix + ("lib",)
+    if target.is_absolute() or ".." in target.parts or target.parts[:len(marker)] != marker:
         raise AuditError("SDK_LIB_LINK_ESCAPES_ROOT")
-    return PurePosixPath(*target.parts[1:])
+    return PurePosixPath(*target.parts[len(marker):])
 
 
 def extract_openorbis_lib(archive: Path, destination: Path, expected_sha256: str = SDK_SHA256) -> int:
@@ -97,10 +134,17 @@ def extract_openorbis_lib(archive: Path, destination: Path, expected_sha256: str
 
     try:
         with tarfile.open(archive, "r:gz") as bundle:
-            for member in bundle.getmembers():
-                rel = _lib_member_path(member.name)
-                if rel is None or not rel.parts:
+            members = bundle.getmembers()
+            sdk_prefix = _find_sdk_prefix(members)
+            for member in members:
+                member_parts = _archive_parts(member.name)
+                rel = _lib_member_path(member.name, sdk_prefix)
+                if rel is None:
                     continue
+                if not rel.parts:
+                    if member.isdir():
+                        continue
+                    raise AuditError("SDK_LIB_ROOT_MEMBER_INVALID")
                 key = rel.as_posix()
                 if key in seen:
                     raise AuditError("SDK_LIB_DUPLICATE_MEMBER")
@@ -111,7 +155,7 @@ def extract_openorbis_lib(archive: Path, destination: Path, expected_sha256: str
                 elif member.isfile():
                     regular.append((member, target))
                 elif member.issym() or member.islnk():
-                    links.append((member, target, _link_target(member.name, member.linkname, member.islnk())))
+                    links.append((member, target, _link_target(member_parts, member.linkname, member.islnk(), sdk_prefix)))
                 else:
                     raise AuditError("SDK_LIB_SPECIAL_FILE")
 
@@ -159,7 +203,6 @@ def extract_openorbis_lib(archive: Path, destination: Path, expected_sha256: str
     if count == 0:
         raise AuditError("SDK_LIB_EMPTY")
     return count
-
 
 def collect_provider_files(root: Path):
     root = Path(root).absolute()
