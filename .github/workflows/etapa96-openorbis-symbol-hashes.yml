@@ -31,6 +31,11 @@ jobs:
         run: |
           python3 -m unittest discover -v -s tests -p 'test_etapa96_openorbis_symbol_hashes.py'
 
+      - name: Instalar LLVM 18 para ler ELF e archives do SDK
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends llvm-18 curl
+
       - name: Baixar OpenOrbis v0.5.4 e conferir SHA-256
         env:
           SDK_URL: https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz
@@ -48,7 +53,7 @@ jobs:
           python3 tools/etapa96/export_openorbis_symbol_hashes.py \
             --archive "$RUNNER_TEMP/toolchain-llvm-18.tar.gz" \
             --extract-root "$RUNNER_TEMP/openorbis-lib" \
-            --nm nm \
+            --nm llvm-nm-18 \
             --output "$RUNNER_TEMP/out/openorbis-v054-symbol-hashes.json"
 
       - uses: actions/upload-artifact@v4
