@@ -1,6 +1,17 @@
 name: Etapa 98 - public runtime provider symbol hashes
 
 on:
+  push:
+    branches:
+      - kazuma-etapa98-runtime-provider-hashes-20261118
+    paths:
+      - "tools/link/export_public_runtime_symbol_hashes.py"
+      - "tools/link/private_aot_provider_hash_join.py"
+      - "tools/link/compile_full_runtime.py"
+      - "tools/link/compile_ps4_platform_stack.py"
+      - "tests/test_public_runtime_symbol_hashes.py"
+      - "tests/test_private_aot_provider_hash_join.py"
+      - ".github/workflows/etapa98-runtime-provider-hashes.yml"
   pull_request:
     paths:
       - "tools/link/export_public_runtime_symbol_hashes.py"
