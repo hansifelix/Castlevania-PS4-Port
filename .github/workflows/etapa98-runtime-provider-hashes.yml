@@ -181,8 +181,7 @@ jobs:
           git -C "$RUNNER_TEMP/audit-tools" sparse-checkout init --cone
           git -C "$RUNNER_TEMP/audit-tools" sparse-checkout set tools/etapa90 tests
           git -C "$RUNNER_TEMP/audit-tools" checkout -q --detach "$scanner_commit"
-          python3 -m unittest discover -v -s "$RUNNER_TEMP/audit-tools/tests" \\
-            -p 'test_private_aot_sdk_provider_audit.py'
+          python3 -m unittest discover -v -s "$RUNNER_TEMP/audit-tools/tests" -p 'test_private_aot_sdk_provider_audit.py'
 
           cat > "$RUNNER_TEMP/synthetic-inventory.json" <<'JSON'
           {
