@@ -36,11 +36,17 @@ A suíte pública usa apenas inventários e bibliotecas sintéticas. A CI mais r
 
 Detalhes e comando privado: [Etapa 96 — auditoria de provedores](docs/KAZUMA_ETAPA96_PROVIDER_AUDIT.md).
 
+### Etapa 97 — barreira de evidências ABI
+
+A ferramenta `tools/etapa90/private_aot_abi_evidence_gate.py` vincula a revisão ao SHA-256 exato do relatório da Etapa 96, confere hashes de headers/declarações e exige revisão individual de cada definição candidata. Um resultado completo continua **não sendo prova de ABI nem autorização de link**. CI usa somente fixtures sintéticas.
+
+Detalhes: [Etapa 97 — revisão ABI](docs/KAZUMA_ETAPA97_ABI_REVIEW.md).
+
 ## Próximos marcos
 
 1. Reunir, no ambiente privado, a cópia exata do OpenOrbis 0.5.4 e os objetos do runtime PS4 compilados com a mesma toolchain.
 2. Executar a Etapa 96 sem extrair ou publicar arquivos comerciais; manter o JSON completo privado e compartilhar somente contagens agregadas.
-3. Revisar cada candidato usando headers, versões, binding, tipo, convenção de chamada, relocations e dependências transitivas. Nome idêntico não prova ABI.
+3. Executar a Etapa 97 e revisar individualmente cada definição candidata, mantendo hashes e evidências no ambiente privado. A barreira não prova ABI nem autoriza link.
 4. Só depois preparar um link privado controlado sem stubs falsos. Se o link executável fechar, avançar para a geração controlada de EBOOT/PKG e teste de instalação/boot no PS4 autorizado.
 5. Integrar e validar vídeo/WSI, controles, áudio, filesystem, SaveData e primeiro frame antes de declarar qualquer estado jogável.
 
@@ -62,6 +68,7 @@ ctest --test-dir build --output-on-failure
 python3 tests/test_private_aot_object_audit.py
 python3 tests/test_private_aot_symbol_inventory.py
 python3 tests/test_private_aot_sdk_provider_audit.py
+python3 tests/test_private_aot_abi_evidence_gate.py
 ```
 
 A CI pública usa fixtures sintéticas para os auditores privados. Um resultado verde valida os testes executados no runner Linux, não a resolução dos símbolos comerciais nem a execução no console.
