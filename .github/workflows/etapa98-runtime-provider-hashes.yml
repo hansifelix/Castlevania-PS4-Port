@@ -173,7 +173,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          scanner_commit="4620001695117e4fe9a75b786c064c2bfe55e86f"
+          scanner_commit="72d825f23a7f5719f87d6b8f49dfe21694f43227"
           git clone -q --filter=blob:none --no-checkout \
             https://github.com/hansifelix/Castlevania-PS4-Port.git \
             "$RUNNER_TEMP/audit-tools"
