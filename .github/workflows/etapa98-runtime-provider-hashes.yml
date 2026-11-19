@@ -1,0 +1,258 @@
+name: Etapa 98 - public runtime provider symbol hashes
+
+on:
+  push:
+    branches:
+      - kazuma-etapa98-runtime-provider-hashes-20261118
+    paths:
+      - "tools/link/export_public_runtime_symbol_hashes.py"
+      - "tools/link/private_aot_provider_hash_join.py"
+      - "tools/link/compile_full_runtime.py"
+      - "tools/link/compile_ps4_platform_stack.py"
+      - "tests/test_public_runtime_symbol_hashes.py"
+      - "tests/test_private_aot_provider_hash_join.py"
+      - ".github/workflows/etapa98-runtime-provider-hashes.yml"
+  pull_request:
+    paths:
+      - "tools/link/export_public_runtime_symbol_hashes.py"
+      - "tools/link/private_aot_provider_hash_join.py"
+      - "tools/link/compile_full_runtime.py"
+      - "tools/link/compile_ps4_platform_stack.py"
+      - "tests/test_public_runtime_symbol_hashes.py"
+      - "tests/test_private_aot_provider_hash_join.py"
+      - ".github/workflows/etapa98-runtime-provider-hashes.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime-provider-hashes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Testar exportador e join privado com fixtures sintéticas
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -v -s tests -p 'test_public_runtime_symbol_hashes.py'
+          python3 -m unittest discover -v -s tests -p 'test_private_aot_provider_hash_join.py'
+
+      - name: Instalar LLVM 18 e ferramentas de checkout
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18 git curl ca-certificates
+
+      - name: Baixar OpenOrbis v0.5.4 e validar SHA-256 fixado
+        env:
+          SDK_URL: https://github.com/OpenOrbis/OpenOrbis-PS4-Toolchain/releases/download/v0.5.4/toolchain-llvm-18.tar.gz
+          SDK_SHA256: 3c7cd5bb593ca74fa1c13fd59f3938dc0fc07985167f7275063019e63abe4526
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/sdk"
+          curl -fL --retry 5 --retry-delay 5 --connect-timeout 20 --max-time 300 \
+            "$SDK_URL" -o "$RUNNER_TEMP/openorbis.tar.gz"
+          printf '%s  %s\n' "$SDK_SHA256" "$RUNNER_TEMP/openorbis.tar.gz" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/openorbis.tar.gz" -C "$RUNNER_TEMP/sdk"
+          sdk_link="$(find "$RUNNER_TEMP/sdk" -name link.x -type f -print -quit)"
+          test -s "$sdk_link"
+          echo "KAZUMA_SDK=$(dirname "$sdk_link")" >> "$GITHUB_ENV"
+
+      - name: Obter runtime e headers Vulkan em revisões imutáveis
+        run: |
+          set -euo pipefail
+          git clone -q --filter=blob:none --sparse \
+            https://github.com/SwonDev/cstlvnia-blmont-to-macos.git "$RUNNER_TEMP/nx-src"
+          git -C "$RUNNER_TEMP/nx-src" checkout -q --detach 4043f21bb4f656d34cd17ba070238c7728d00631
+          git -C "$RUNNER_TEMP/nx-src" sparse-checkout set runtime/src runtime/include/nx games/castlevania
+          test -s "$RUNNER_TEMP/nx-src/runtime/src/nvn/nvn_vk.cpp"
+          echo "KAZUMA_NX_SOURCE=$RUNNER_TEMP/nx-src" >> "$GITHUB_ENV"
+
+          git clone -q --filter=blob:none --sparse \
+            https://github.com/KhronosGroup/Vulkan-Headers.git "$RUNNER_TEMP/vkh"
+          git -C "$RUNNER_TEMP/vkh" checkout -q --detach acbb9391c0a597272800cd3f4363661c00a27c77
+          git -C "$RUNNER_TEMP/vkh" sparse-checkout set include/vulkan include/vk_video
+          test -s "$RUNNER_TEMP/vkh/include/vulkan/vulkan.h"
+          echo "KAZUMA_KHRONOS_INCLUDE=$RUNNER_TEMP/vkh/include" >> "$GITHUB_ENV"
+
+      - name: Aplicar compatibilidade temporária C++20 somente no runner
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/compat/nx"
+          cat > "$RUNNER_TEMP/compat/nx/kazuma_cpu_compat.h" <<'CPP'
+          #pragma once
+          #include <cstdint>
+          #include <type_traits>
+          namespace kazuma_cpu_compat {
+          template <typename To, typename From>
+          constexpr To bit_cast(const From& from) noexcept {
+              static_assert(sizeof(To)==sizeof(From));
+              static_assert(std::is_trivially_copyable_v<To> && std::is_trivially_copyable_v<From>);
+              return __builtin_bit_cast(To, from);
+          }
+          template <typename T>
+          constexpr T rotr(T v, int shift) noexcept {
+              static_assert(std::is_unsigned_v<T>);
+              constexpr int nbits=int(sizeof(T)*8);
+              int n=((shift % nbits) + nbits) % nbits;
+              return n ? T((v >> n) | (v << (nbits - n))) : v;
+          }
+          }
+          CPP
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          original=(Path(os.environ["KAZUMA_NX_SOURCE"])/"runtime/include/nx/cpu.h").read_text()
+          assert original.count("#include <bit>")==1
+          assert original.count("std::bit_cast")>=5 and original.count("std::rotr(")==2
+          patched=(original.replace("#include <bit>", '#include "kazuma_cpu_compat.h"')
+                           .replace("std::bit_cast","kazuma_cpu_compat::bit_cast")
+                           .replace("std::rotr(","kazuma_cpu_compat::rotr("))
+          (Path(os.environ["RUNNER_TEMP"])/"compat/nx/cpu.h").write_text(patched)
+          PY
+
+      - name: Compilar 87 fontes runtime, metadados e 14 adaptadores PS4
+        run: |
+          set -euo pipefail
+          python3 tools/link/compile_full_runtime.py \
+            --upstream "$KAZUMA_NX_SOURCE" \
+            --sdk "$KAZUMA_SDK" \
+            --compat "$RUNNER_TEMP/compat" \
+            --vulkan "$KAZUMA_KHRONOS_INCLUDE" \
+            --mesa "$KAZUMA_KHRONOS_INCLUDE" \
+            --out "$RUNNER_TEMP/runtime-objects"
+          runtime_count="$(find "$RUNNER_TEMP/runtime-objects" -maxdepth 1 -type f -name '*.o' | wc -l)"
+          test "$runtime_count" -eq 88
+
+          python3 tools/link/compile_ps4_platform_stack.py \
+            --repository "$GITHUB_WORKSPACE" \
+            --upstream "$KAZUMA_NX_SOURCE" \
+            --sdk "$KAZUMA_SDK" \
+            --compat "$RUNNER_TEMP/compat" \
+            --out "$RUNNER_TEMP/platform-objects"
+          platform_count="$(find "$RUNNER_TEMP/platform-objects" -maxdepth 1 -type f -name '*.o' | wc -l)"
+          test "$platform_count" -eq 14
+
+          mkdir -p "$RUNNER_TEMP/public-objects"
+          cp "$RUNNER_TEMP/runtime-objects/"*.o "$RUNNER_TEMP/public-objects/"
+          cp "$RUNNER_TEMP/platform-objects/"*.o "$RUNNER_TEMP/public-objects/"
+          object_count="$(find "$RUNNER_TEMP/public-objects" -maxdepth 1 -type f -name '*.o' | wc -l)"
+          test "$object_count" -eq 102
+          echo 'KAZUMA_ETAPA98_OBJECTS=88_RUNTIME_AND_METADATA_PLUS_14_PS4_PLATFORM_COMPILED'
+
+      - name: Exportar somente hashes dos provedores públicos
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/out"
+          python3 tools/link/export_public_runtime_symbol_hashes.py \
+            --object-root "$RUNNER_TEMP/public-objects" \
+            --nm llvm-nm-18 \
+            --output "$RUNNER_TEMP/out/public-runtime-provider-hashes.json"
+          python3 - "$RUNNER_TEMP/out/public-runtime-provider-hashes.json" <<'PY'
+          import json, sys
+          data=json.load(open(sys.argv[1], encoding="utf-8"))
+          assert data["object_count"] == 102
+          assert data["runtime_translation_units"] == 87
+          assert data["game_metadata_translation_units"] == 1
+          assert data["ps4_platform_adapter_units"] == 14
+          assert data["scan_complete"] is True
+          assert data["symbol_names_included"] is False
+          assert data["provider_paths_included"] is False
+          assert data["object_names_included"] is False
+          assert data["private_aot_data_included"] is False
+          assert data["abi_compatibility_proven"] is False
+          assert data["link_performed"] is False
+          assert data["eboot_created"] is False and data["pkg_created"] is False
+          assert data["ps4_tested"] is False
+          print("KAZUMA_ETAPA98_HASH_ONLY_MANIFEST=PASS")
+          PY
+
+      - name: Diagnosticar completude do scanner com inventario sintetico
+        shell: bash
+        run: |
+          set -euo pipefail
+          scanner_commit="72d825f23a7f5719f87d6b8f49dfe21694f43227"
+          git clone -q --filter=blob:none --no-checkout \
+            https://github.com/hansifelix/Castlevania-PS4-Port.git \
+            "$RUNNER_TEMP/audit-tools"
+          git -C "$RUNNER_TEMP/audit-tools" fetch -q --depth 1 origin "$scanner_commit"
+          git -C "$RUNNER_TEMP/audit-tools" sparse-checkout init --cone
+          git -C "$RUNNER_TEMP/audit-tools" sparse-checkout set tools/etapa90 tests
+          git -C "$RUNNER_TEMP/audit-tools" checkout -q --detach "$scanner_commit"
+          python3 -m unittest discover -v -s "$RUNNER_TEMP/audit-tools/tests" -p 'test_private_aot_sdk_provider_audit.py'
+
+          cat > "$RUNNER_TEMP/synthetic-inventory.json" <<'JSON'
+          {
+            "audit_mode": "READ_ONLY_SYMBOL_TABLE_PARSE_NO_EXTRACT_NO_COMPILE_NO_LINK",
+            "root_name": "synthetic-provider-diagnostic",
+            "index_coverage_complete": true,
+            "duplicate_metadata_complete": true,
+            "invalid_objects": [],
+            "private_symbol_names_in_report": true,
+            "files_extracted": false,
+            "compilation_performed": false,
+            "link_performed": false,
+            "totals": {
+              "object_copies_parsed": 1,
+              "undefined_symbols_without_provider_in_aot_inventory": 1
+            },
+            "undefined_without_aot_provider": {
+              "__kazuma_synthetic_provider_probe_20261118__": ["main:0"]
+            }
+          }
+          JSON
+          mkdir -p "$RUNNER_TEMP/provider-diagnostic"
+          set +e
+          python3 "$RUNNER_TEMP/audit-tools/tools/etapa90/private_aot_sdk_provider_audit.py" \
+            --inventory "$RUNNER_TEMP/synthetic-inventory.json" \
+            --provider-root "openorbis=$KAZUMA_SDK/lib" \
+            --provider-root "runtime=$RUNNER_TEMP/public-objects" \
+            --nm llvm-nm-18 \
+            --report "$GITHUB_WORKSPACE/.scan-output/scan.json"
+          scanner_rc=$?
+          set -e
+          test "$scanner_rc" -le 1
+          python3 - "$GITHUB_WORKSPACE/.scan-output/scan.json" "$scanner_rc" <<'PY_DIAG'
+          import hashlib, json, os, subprocess, sys
+          from pathlib import Path
+          data=json.load(open(sys.argv[1], encoding="utf-8"))
+          errors=data.get("library_scan_errors", [])
+          symlinks=data.get("provider_tree_symlinks", [])
+          print("KAZUMA_PROVIDER_SCAN_DIAGNOSTIC=" + ("COMPLETE" if data.get("all_provider_roots_scanned") else "INCOMPLETE"))
+          print("KAZUMA_PROVIDER_SCAN_LIBRARY_ERRORS=" + str(len(errors)))
+          print("KAZUMA_PROVIDER_SCAN_SYMLINKS=" + str(len(symlinks)))
+          print("KAZUMA_PROVIDER_SCAN_SYNTHETIC_MISSING=" + str(data.get("no_provider_candidate_count")))
+          roots={"openorbis": Path(os.environ["KAZUMA_SDK"])/"lib",
+                 "runtime": Path(os.environ["RUNNER_TEMP"])/"public-objects"}
+          for row in errors:
+              label=row.get("root","?")
+              rel=row.get("path","?")
+              path=roots.get(label, Path("/nonexistent"))/rel
+              kind=subprocess.run(["file","-b",str(path)],capture_output=True,text=True).stdout.strip()
+              probe=subprocess.run(["llvm-nm-18","-A","-g","--defined-only","--format=posix",str(path)],
+                                   capture_output=True,text=True,timeout=120)
+              stderr=probe.stderr.strip()
+              stderr_class=("EMPTY" if not stderr else
+                            "NO_SYMBOLS_ONLY" if all(x=="no symbols" or x.endswith(": no symbols") for x in stderr.splitlines() if x.strip())
+                            else "OTHER_DIAGNOSTIC")
+              print("KAZUMA_PROVIDER_SCAN_ERROR root="+label+" path="+rel+
+                    " code="+row.get("error","?")+" file_type="+kind+
+                    " nm_rc="+str(probe.returncode)+" stderr_class="+stderr_class+
+                    " stderr_sha256="+hashlib.sha256(stderr.encode()).hexdigest()+
+                    " stderr_preview="+stderr[:240].replace("\n"," | "))
+          assert data.get("aot_unresolved_symbol_count") == 1
+          assert data.get("no_provider_candidate_count") == 1
+          assert data.get("abi_compatibility_proven") is False
+          assert data.get("link_performed") is False
+          if errors or symlinks or not data.get("all_provider_roots_scanned"):
+              raise SystemExit(1)
+          PY_DIAG
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: public-runtime-provider-hashes
+          path: ${{ runner.temp }}/out/public-runtime-provider-hashes.json
+          if-no-files-found: error
+          retention-days: 7
