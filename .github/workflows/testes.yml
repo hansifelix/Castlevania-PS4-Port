@@ -30,3 +30,4 @@ jobs:
           ctest --test-dir build --output-on-failure
           python3 tests/test_private_aot_object_audit.py
           python3 tests/test_private_aot_symbol_inventory.py
+          python3 tests/test_private_aot_sdk_provider_audit.py
