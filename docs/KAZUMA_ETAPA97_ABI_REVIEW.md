@@ -76,3 +76,17 @@ O relatório completo contém nomes mangled e permanece apenas no ambiente priva
 Nomes mangled, caminhos privados, hashes de headers e relatórios completos devem permanecer fora do repositório, chat e artefatos públicos. A CI usa apenas fixtures sintéticas e headers temporários; não valida os binários privados do projeto.
 
 A bateria cobre integridade do relatório de provedores, símbolos em categorias conflitantes, hashes do header e da declaração, membros ambíguos, ausência de candidato, revisões faltantes, timestamps com fuso e a regra de nunca autorizar link.
+
+
+## Pré-triagem hash-only de provedores — 19/11/2026
+
+A CI das Etapas 96 e 98 concluiu duas raízes públicas com manifests hash-only íntegros: OpenOrbis v0.5.4 (`lib/`) e 102 objetos públicos fixados do runtime/metadata/adaptadores PS4. O inventário privado Etapa 91 foi cruzado localmente com ambos os manifests; somente contagens agregadas foram preservadas, sem publicar nomes mangled, hashes individuais, caminhos ou IDs de objetos consumidores.
+
+- Inventário de entrada: 1.916 objetos AOT válidos e 39 nomes únicos ainda sem definição interna.
+- OpenOrbis v0.5.4: 18 nomes com correspondência hash exata; 16 têm múltiplas definições no manifesto e 2 têm definição única.
+- Runtime/metadata/adaptadores PS4: 8 nomes com correspondência hash exata; os 8 têm uma definição no manifesto.
+- União das duas raízes: 26 nomes candidatos; 10 com uma definição total e 16 com múltiplas definições; 13 nomes não tiveram correspondência em nenhuma das duas raízes.
+
+**Interpretação:** esta é uma triagem por hash exato do nome, não uma varredura privada por definição/caminho/membro nem uma prova de compatibilidade. As 16 ambiguidades do SDK continuam bloqueadas até que cada definição seja identificada e revisada individualmente. Os 10 candidatos de definição única também exigem revisão ABI — header e trecho de declaração com hashes, versão do SDK/símbolo, target, relocations, convenção de chamada, layout de tipos, dependências transitivas e resolução esperada do linker.
+
+O próximo passo é executar a Etapa 96 privada sobre as raízes binárias correspondentes e gerar o relatório completo protegido; só então preparar `candidate_reviews` vinculado ao SHA-256 exato desse relatório. Nenhum link foi autorizado; ABI permanece não comprovada; nenhum ELF executável, EBOOT, PKG, instalação, boot ou gameplay foi produzido.
