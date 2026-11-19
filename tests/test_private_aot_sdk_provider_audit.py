@@ -204,9 +204,9 @@ class ProviderAuditTests(unittest.TestCase):
             def fake(cmd, **kwargs):
                 target = cmd[-1]
                 if Path(target).name == "crtn.o":
-                    stderr = f"{target}: no symbols\\n"
+                    stderr = f"{target}: no symbols\n"
                 else:
-                    stderr = f"{target}[__unmapself.lo]: no symbols\\n"
+                    stderr = f"{target}[__unmapself.lo]: no symbols\n"
                 return SimpleNamespace(returncode=0, stdout="", stderr=stderr)
 
             with patch(
