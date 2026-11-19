@@ -173,14 +173,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          scanner_commit="0cf3937ad0b94ef5b44fc3d0fa2fb3060956f45b"
+          scanner_commit="4620001695117e4fe9a75b786c064c2bfe55e86f"
           git clone -q --filter=blob:none --no-checkout \
             https://github.com/hansifelix/Castlevania-PS4-Port.git \
             "$RUNNER_TEMP/audit-tools"
           git -C "$RUNNER_TEMP/audit-tools" fetch -q --depth 1 origin "$scanner_commit"
           git -C "$RUNNER_TEMP/audit-tools" sparse-checkout init --cone
-          git -C "$RUNNER_TEMP/audit-tools" sparse-checkout set tools/etapa90
+          git -C "$RUNNER_TEMP/audit-tools" sparse-checkout set tools/etapa90 tests
           git -C "$RUNNER_TEMP/audit-tools" checkout -q --detach "$scanner_commit"
+          python3 -m unittest discover -v -s "$RUNNER_TEMP/audit-tools/tests" \\
+            -p 'test_private_aot_sdk_provider_audit.py'
 
           cat > "$RUNNER_TEMP/synthetic-inventory.json" <<'JSON'
           {
