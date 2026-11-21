@@ -21,6 +21,10 @@ on:
       - "tests/test_public_runtime_symbol_hashes.py"
       - "tests/test_private_aot_provider_hash_join.py"
       - ".github/workflows/etapa98-runtime-provider-hashes.yml"
+      - "tools/link/patch_unsupported_shader_stage_failclosed.py"
+      - "tests/test_unsupported_shader_stage_patch.py"
+      - "tests/unsupported_shader_stage_reflection.cpp"
+      - "docs/KAZUMA_ETAPA258_UNSUPPORTED_STAGE.md"
   workflow_dispatch:
 
 permissions:
@@ -38,6 +42,7 @@ jobs:
           set -euo pipefail
           python3 -m unittest discover -v -s tests -p 'test_public_runtime_symbol_hashes.py'
           python3 -m unittest discover -v -s tests -p 'test_private_aot_provider_hash_join.py'
+          python3 -m unittest discover -v -s tests -p 'test_unsupported_shader_stage_patch.py'
 
       - name: Instalar LLVM 18 e ferramentas de checkout
         run: |
@@ -112,6 +117,13 @@ jobs:
                            .replace("std::rotr(","kazuma_cpu_compat::rotr("))
           (Path(os.environ["RUNNER_TEMP"])/"compat/nx/cpu.h").write_text(patched)
           PY
+
+      - name: Aplicar barreira fail-closed e testar reflection SPIR-V no host
+        run: |
+          set -euo pipefail
+          python3 tools/link/patch_unsupported_shader_stage_failclosed.py "$KAZUMA_NX_SOURCE"
+          clang++-18 -std=c++20 -DNX_SHADERS_STANDALONE -I"$KAZUMA_NX_SOURCE/runtime/src/nvn" "$KAZUMA_NX_SOURCE/runtime/src/nvn/nvn_spirv_reflect.cpp" tests/unsupported_shader_stage_reflection.cpp -o "$RUNNER_TEMP/unsupported-stage-reflection-test"
+          "$RUNNER_TEMP/unsupported-stage-reflection-test"
 
       - name: Compilar 87 fontes runtime, metadados e 14 adaptadores PS4
         run: |
