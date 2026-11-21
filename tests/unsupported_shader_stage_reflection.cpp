@@ -3,6 +3,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <string>
+#include <initializer_list>
 
 using nx::nvn::ShaderReflection;
 using nx::nvn::reflect_spirv;
