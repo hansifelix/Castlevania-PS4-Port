@@ -122,11 +122,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/link/patch_unsupported_shader_stage_failclosed.py "$KAZUMA_NX_SOURCE"
-          clang++-18 -std=c++20 -DNX_SHADERS_STANDALONE \\
-            -I"$KAZUMA_NX_SOURCE/runtime/src/nvn" \\
-            "$KAZUMA_NX_SOURCE/runtime/src/nvn/nvn_spirv_reflect.cpp" \\
-            tests/unsupported_shader_stage_reflection.cpp \\
-            -o "$RUNNER_TEMP/unsupported-stage-reflection-test"
+          clang++-18 -std=c++20 -DNX_SHADERS_STANDALONE -I"$KAZUMA_NX_SOURCE/runtime/src/nvn" "$KAZUMA_NX_SOURCE/runtime/src/nvn/nvn_spirv_reflect.cpp" tests/unsupported_shader_stage_reflection.cpp -o "$RUNNER_TEMP/unsupported-stage-reflection-test"
           "$RUNNER_TEMP/unsupported-stage-reflection-test"
 
       - name: Compilar 87 fontes runtime, metadados e 14 adaptadores PS4
