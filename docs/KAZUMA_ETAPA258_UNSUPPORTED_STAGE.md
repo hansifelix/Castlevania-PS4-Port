@@ -17,10 +17,12 @@ O script `tools/link/patch_unsupported_shader_stage_failclosed.py` modifica some
 
 O patch não adiciona Geometry support. Se o Geometry shader do índice RomFS 238 for obrigatório, continuará bloqueado até implementação NVN→Vulkan completa, incluindo descriptor slot, interface GS→FS, topology e capability `geometryShader`.
 
-## Validação prevista nesta PR
+## Validação nesta PR
 
-- Fixture host do patch (drift, symlinks e idempotência).
-- SPIR-V synthetic host: Vertex/Fragment/Compute aceitos; Geometry/Tessellation/Unknown rejeitados.
+- Fixture host do patch: drift, symlinks e idempotência.
+- SPIR-V synthetic host: Vertex/Fragment/Compute aceitos; Tessellation, Geometry, Kernel, Task/Mesh NV e Ray execution models rejeitados.
+- Fixture multi-entrypoint: a primeira entrypoint suportada é a selecionada pelo runtime; primeira entrypoint unsupported é rejeitada.
+- Teste compilado do `stage_bit` do patch de produção: flags Vertex/Fragment/Compute exatas, Unknown e enum inválido retornam zero.
 - Cross-compile OpenOrbis dos 88 objetos runtime/metadata e 14 adapters PS4 via Etapa 98, sem AOT ou assets comerciais.
 
 ## Limites
