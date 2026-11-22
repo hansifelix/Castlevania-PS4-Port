@@ -222,10 +222,13 @@ def write_report(path: Path, report: dict, protected: list[Path]) -> Path:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--inventory", type=Path, required=True)
+    parser.add_argument("--private-root", type=Path, required=True, help="Actual private AOT directory; report must stay outside it.")
     parser.add_argument("--provider-manifest", type=Path, action="append", required=True)
     parser.add_argument("--report", type=Path, required=True)
     args = parser.parse_args()
     try:
+        if has_symlink_component(args.private_root) or not args.private_root.is_dir():
+            raise JoinError("PRIVATE_ROOT_NOT_SAFE")
         _, pending = load_inventory(args.inventory)
         rows = []
         for path in args.provider_manifest:
@@ -257,7 +260,7 @@ def main() -> int:
         }
         destination = write_report(
             args.report, report,
-            [args.inventory.parent, *(path.parent for path in args.provider_manifest)]
+            [args.private_root, *(path.parent for path in args.provider_manifest)]
         )
     except (OSError, JoinError) as exc:
         code = str(exc) if isinstance(exc, JoinError) else type(exc).__name__
