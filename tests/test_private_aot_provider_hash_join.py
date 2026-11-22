@@ -3,6 +3,9 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from contextlib import redirect_stdout
+from io import StringIO
+from unittest.mock import patch
 
 from tools.link.private_aot_provider_hash_join import (
     JoinError,
@@ -10,6 +13,7 @@ from tools.link.private_aot_provider_hash_join import (
     load_inventory,
     validate_provider_manifest,
     write_report,
+    main,
 )
 
 
@@ -131,6 +135,68 @@ class PrivateHashJoinTests(unittest.TestCase):
             inv.write_text("{}", encoding="utf-8")
             with self.assertRaisesRegex(JoinError, "REPORT_MUST_BE_OUTSIDE_INPUT_ROOTS"):
                 write_report(root / "report.json", {}, [root])
+
+    def test_cli_allows_drive_root_report_outside_private_aot_subfolder(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            drive = Path(tmp) / "drive"
+            drive.mkdir()
+            private_root = drive / "Kazuma_Traducoes_AOT_Privado"
+            private_root.mkdir()
+            inventory_path = drive / "RELATORIO_SIMBOLOS_ETAPA91_PRIVADO.json"
+            inventory_path.write_text(json.dumps(inventory()), encoding="utf-8")
+            provider_root = Path(tmp) / "provider"
+            provider_root.mkdir()
+            provider_path = provider_root / "manifest.json"
+            provider_path.write_text(json.dumps(provider_manifest([
+                ("__cxa_synthetic", 2, ["T"]),
+                ("nx::synthetic_runtime", 1, ["T"]),
+            ])), encoding="utf-8")
+            report_path = drive / "RELATORIO_HASH_JOIN.json"
+            argv = [
+                "join", "--inventory", str(inventory_path),
+                "--private-root", str(private_root),
+                "--provider-manifest", str(provider_path),
+                "--report", str(report_path),
+            ]
+            output = StringIO()
+            with patch("sys.argv", argv), redirect_stdout(output):
+                rc = main()
+            self.assertEqual(rc, 0)
+            report = json.loads(report_path.read_text(encoding="utf-8"))
+            self.assertEqual(report["provider_results"][0]["exact_name_hash_matches"], 2)
+            self.assertEqual(report["provider_results"][0]["no_provider_hash_match"], 1)
+            self.assertFalse(report["private_symbol_names_included"])
+            self.assertFalse(report["private_symbol_hashes_included"])
+            self.assertNotIn("nx::synthetic_runtime", report_path.read_text(encoding="utf-8"))
+            self.assertIn("PRIVATE_HASH_JOIN_COMPLETE", output.getvalue())
+
+    def test_cli_blocks_report_inside_private_aot_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            drive = Path(tmp) / "drive"
+            drive.mkdir()
+            private_root = drive / "Kazuma_Traducoes_AOT_Privado"
+            private_root.mkdir()
+            inventory_path = drive / "RELATORIO_SIMBOLOS_ETAPA91_PRIVADO.json"
+            inventory_path.write_text(json.dumps(inventory()), encoding="utf-8")
+            provider_root = Path(tmp) / "provider"
+            provider_root.mkdir()
+            provider_path = provider_root / "manifest.json"
+            provider_path.write_text(json.dumps(provider_manifest([
+                ("__cxa_synthetic", 2, ["T"]),
+            ])), encoding="utf-8")
+            report_path = private_root / "RELATORIO_HASH_JOIN.json"
+            argv = [
+                "join", "--inventory", str(inventory_path),
+                "--private-root", str(private_root),
+                "--provider-manifest", str(provider_path),
+                "--report", str(report_path),
+            ]
+            output = StringIO()
+            with patch("sys.argv", argv), redirect_stdout(output):
+                rc = main()
+            self.assertEqual(rc, 2)
+            self.assertFalse(report_path.exists())
+            self.assertIn("REPORT_MUST_BE_OUTSIDE_INPUT_ROOTS", output.getvalue())
 
 
 if __name__ == "__main__":
