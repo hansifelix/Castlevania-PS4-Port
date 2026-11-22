@@ -24,6 +24,7 @@ on:
       - "tools/link/patch_unsupported_shader_stage_failclosed.py"
       - "tests/test_unsupported_shader_stage_patch.py"
       - "tests/unsupported_shader_stage_reflection.cpp"
+      - "tests/test_unsupported_shader_stage_pipeline.py"
       - "docs/KAZUMA_ETAPA258_UNSUPPORTED_STAGE.md"
   workflow_dispatch:
 
@@ -49,6 +50,11 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18 git curl ca-certificates
+
+      - name: Exercitar stage_bit fail-closed com o código exato do patch
+        run: |
+          set -euo pipefail
+          python3 tests/test_unsupported_shader_stage_pipeline.py
 
       - name: Baixar OpenOrbis v0.5.4 e validar SHA-256 fixado
         env:
