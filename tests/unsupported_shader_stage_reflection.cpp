@@ -38,7 +38,7 @@ int main() {
         ShaderReflection reflection;
         std::string error;
         if (!reflect_model(model, reflection, error)) {
-            std::fprintf(stderr, "supported execution model %u rejected: %s\\n", model, error.c_str());
+            std::fprintf(stderr, "supported execution model %u rejected: %s\n", model, error.c_str());
             return 1;
         }
     }
@@ -47,11 +47,11 @@ int main() {
         ShaderReflection reflection;
         std::string error;
         if (reflect_model(model, reflection, error)) {
-            std::fprintf(stderr, "unsupported execution model %u accepted\\n", model);
+            std::fprintf(stderr, "unsupported execution model %u accepted\n", model);
             return 2;
         }
         if (error != "unsupported SPIR-V execution model") {
-            std::fprintf(stderr, "wrong rejection for model %u: %s\\n", model, error.c_str());
+            std::fprintf(stderr, "wrong rejection for model %u: %s\n", model, error.c_str());
             return 3;
         }
     }
@@ -62,7 +62,7 @@ int main() {
         std::string error;
         if (!reflect_models({0u, 3u}, reflection, error) || reflection.stage != nx::nvn::ShaderStage::Vertex ||
             reflection.entry != "main") {
-            std::fprintf(stderr, "supported first entry rejected or misclassified: %s\\n", error.c_str());
+            std::fprintf(stderr, "supported first entry rejected or misclassified: %s\n", error.c_str());
             return 4;
         }
     }
@@ -70,7 +70,7 @@ int main() {
         ShaderReflection reflection;
         std::string error;
         if (reflect_models({3u, 0u}, reflection, error) || error != "unsupported SPIR-V execution model") {
-            std::fprintf(stderr, "unsupported first entry accepted: %s\\n", error.c_str());
+            std::fprintf(stderr, "unsupported first entry accepted: %s\n", error.c_str());
             return 5;
         }
     }
