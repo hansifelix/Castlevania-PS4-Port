@@ -14,7 +14,7 @@ int main(int argc, char** argv) {
     if (bytes <= 0 || (bytes % 4) != 0) return 12;
     in.seekg(0, std::ios::beg);
     std::vector<uint32_t> words(static_cast<size_t>(bytes) / 4);
-    in.read(reinterpret_cast<char*>(words.data()), bytes);
+    in.read(reinterpret_cast<char*>(words.data()), static_cast<std::streamsize>(bytes));
     if (!in) return 13;
 
     nx::nvn::ShaderReflection reflection;
