@@ -27,7 +27,6 @@ on:
       - "tests/test_unsupported_shader_stage_pipeline.py"
       - "tests/geometry_valid_rejected.cpp"
       - "tests/test_geometry_valid_spirv_failclosed.py"
-      - ".github/workflows/etapa263-geometry-valid-spv.yml"
       - "docs/KAZUMA_ETAPA258_UNSUPPORTED_STAGE.md"
   workflow_dispatch:
 
