@@ -5,9 +5,12 @@ from __future__ import annotations
 import shutil
 import subprocess
 import tempfile
+import sys
 from pathlib import Path
 
-from tools.link.patch_unsupported_shader_stage_failclosed import PATCHES
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+from tools.link.patch_unsupported_shader_stage_failclosed import PATCHES  # noqa: E402
 
 
 def main() -> int:
