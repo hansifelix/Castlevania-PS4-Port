@@ -1,0 +1,30 @@
+name: Etapa 264 — draw-stage fail-closed host regression
+
+on:
+  push:
+    branches:
+      - kazuma-etapa258-unsupported-stage-failclosed-20261121
+    paths:
+      - "tests/test_unsupported_shader_stage_draw_guard.py"
+      - "tools/link/patch_unsupported_shader_stage_failclosed.py"
+      - ".github/workflows/etapa264-draw-guard-host.yml"
+  pull_request:
+    paths:
+      - "tests/test_unsupported_shader_stage_draw_guard.py"
+      - "tools/link/patch_unsupported_shader_stage_failclosed.py"
+      - ".github/workflows/etapa264-draw-guard-host.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  draw-guard:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compilar e exercitar o guard de draw extraído do patch de produção
+        run: |
+          set -euo pipefail
+          python3 tests/test_unsupported_shader_stage_draw_guard.py
