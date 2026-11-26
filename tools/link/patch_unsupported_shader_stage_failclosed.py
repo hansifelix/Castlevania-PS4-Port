@@ -50,6 +50,36 @@ PATCHES = {
     ),
 }
 
+
+    "runtime/src/nvn/nvn_program_bindings.h": (
+        """inline const std::vector<const ShaderInfo*>* graphics_program_shaders(const StagePrograms& programs) {
+    thread_local std::vector<const ShaderInfo*> result;
+    result.clear();
+    constexpr ShaderStage stages[] = {ShaderStage::Vertex, ShaderStage::Fragment};
+    for (unsigned stage = 0; stage < 2; stage++) {
+        const auto* shaders = programs[stage] ? program_shaders(programs[stage]) : nullptr;
+        if (shaders) for (const auto* shader : *shaders)
+            if (shader->stage == stages[stage]) { result.push_back(shader); break; }
+    }
+    return &result;
+}""",
+        """inline const std::vector<const ShaderInfo*>* graphics_program_shaders(const StagePrograms& programs) {
+    thread_local std::vector<const ShaderInfo*> result;
+    result.clear();
+    constexpr ShaderStage stages[] = {ShaderStage::Vertex, ShaderStage::Fragment};
+    for (unsigned stage = 0; stage < 2; stage++) {
+        const auto* shaders = programs[stage] ? program_shaders(programs[stage]) : nullptr;
+        if (shaders) for (const auto* shader : *shaders)
+            if (shader->stage == stages[stage]) { result.push_back(shader); break; }
+    }
+    // NVN slots 2-4 are Geometry/Tessellation, unsupported by this backend.
+    // Keep a null sentinel so draw() rejects instead of silently dropping a bound stage.
+    for (unsigned stage = 2; stage < 5; stage++)
+        if (programs[stage]) { result.push_back(nullptr); break; }
+    return &result;
+}""",
+    ),
+
 class PatchError(Exception):
     pass
 
