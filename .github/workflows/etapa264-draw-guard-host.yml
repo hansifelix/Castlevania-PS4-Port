@@ -1,4 +1,4 @@
-name: Etapa 264 — draw-stage fail-closed host regression
+name: Etapas 264-265 — draw guard e slots graphics fail-closed
 
 on:
   push:
@@ -6,6 +6,7 @@ on:
       - kazuma-etapa258-unsupported-stage-failclosed-20261121
     paths:
       - "tests/test_unsupported_shader_stage_draw_guard.py"
+      - "tests/test_unsupported_graphics_stage_binding.py"
       - "tools/link/patch_unsupported_shader_stage_failclosed.py"
       - ".github/workflows/etapa264-draw-guard-host.yml"
   pull_request:
@@ -28,3 +29,4 @@ jobs:
         run: |
           set -euo pipefail
           python3 tests/test_unsupported_shader_stage_draw_guard.py
+          python3 tests/test_unsupported_graphics_stage_binding.py
