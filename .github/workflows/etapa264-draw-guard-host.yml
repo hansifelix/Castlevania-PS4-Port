@@ -12,6 +12,7 @@ on:
   pull_request:
     paths:
       - "tests/test_unsupported_shader_stage_draw_guard.py"
+      - "tests/test_unsupported_graphics_stage_binding.py"
       - "tools/link/patch_unsupported_shader_stage_failclosed.py"
       - ".github/workflows/etapa264-draw-guard-host.yml"
   workflow_dispatch:
@@ -25,7 +26,7 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-      - name: Compilar e exercitar o guard de draw extraído do patch de produção
+      - name: Compilar os guards de draw e os slots graphics extraídos dos patches de produção
         run: |
           set -euo pipefail
           python3 tests/test_unsupported_shader_stage_draw_guard.py
