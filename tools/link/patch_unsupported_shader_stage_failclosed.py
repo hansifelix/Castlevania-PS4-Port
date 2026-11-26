@@ -48,9 +48,6 @@ PATCHES = {
     const ShaderInfo* fs = nullptr;
     for (const ShaderInfo* s : *shaders) {""",
     ),
-}
-
-
     "runtime/src/nvn/nvn_program_bindings.h": (
         """inline const std::vector<const ShaderInfo*>* graphics_program_shaders(const StagePrograms& programs) {
     thread_local std::vector<const ShaderInfo*> result;
@@ -79,6 +76,8 @@ PATCHES = {
     return &result;
 }""",
     ),
+
+}
 
 class PatchError(Exception):
     pass
