@@ -110,7 +110,7 @@ def apply_patch(root: Path) -> int:
         if text.count(before) != 1:
             raise PatchError("PINNED_SOURCE_ANCHOR_DRIFT")
         prepared.append((path, text.replace(before, after, 1), True))
-    # Validate all three files before writing any of them.
+    # Validate every source before writing any of them.
     for path, text, changed in prepared:
         if changed:
             temp = path.with_name(path.name + ".kazuma258.tmp")
