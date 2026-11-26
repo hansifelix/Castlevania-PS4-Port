@@ -28,3 +28,17 @@ O patch não adiciona Geometry support. Se o Geometry shader do índice RomFS 23
 ## Limites
 
 Não traduz shaders, não compila o bundle GPU, não cria EBOOT/PKG e não executa GPU, PS4 ou gameplay. O patch é uma barreira de segurança de estágio, não solução para Geometry.
+
+
+## Etapa 265 — fail-closed para stages NVN ligados fora de VS/FS (26/11/2026)
+
+**Achado adicional:** o helper upstream `graphics_program_shaders()` só recolhe os slots NVN 0 (Vertex) e 1 (Fragment). Geometry (slot 2) e Tessellation (slots 3/4) podiam estar ligados em `StagePrograms`, mas ser silenciosamente descartados antes do guard Etapa 264; por isso, o guard de draw não os via.
+
+**Correção experimental no patch pinado:**
+- Se qualquer slot 2–4 estiver ligado, o helper acrescenta um sentinela nulo à lista graphics.
+- O guard Etapa 264 rejeita esse sentinela antes de `program_layout`, evitando continuar com pipeline VS/FS incompleto.
+- Compute (slot 5) permanece fora do draw gráfico e não é rejeitado por esta regra.
+
+**Regressão host:** compila a função helper extraída do patch de produção; verifica Vertex+Fragment, cada slot Geometry/Tessellation bloqueado, Compute separado e limpeza de estado entre chamadas. Workflow host Etapas 264–265, sem SDK/AOT/ROM/assets.
+
+**Limites:** não implementa Geometry/Tessellation. Nenhum shader comercial, bundle real, GPU, EBOOT/PKG, boot PS4 ou gameplay foi testado.
