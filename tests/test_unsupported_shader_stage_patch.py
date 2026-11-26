@@ -16,11 +16,11 @@ class UnsupportedStagePatchTests(unittest.TestCase):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(before + "\n", encoding="utf-8")
 
-    def test_patches_all_three_pinned_sources(self):
+    def test_patches_all_four_pinned_sources(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             self.make_tree(root)
-            self.assertEqual(apply_patch(root), 3)
+            self.assertEqual(apply_patch(root), len(PATCHES))
             for relative, (_, after) in PATCHES.items():
                 self.assertIn(after, (root / relative).read_text(encoding="utf-8"))
 
@@ -28,7 +28,7 @@ class UnsupportedStagePatchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             self.make_tree(root)
-            self.assertEqual(apply_patch(root), 3)
+            self.assertEqual(apply_patch(root), len(PATCHES))
             self.assertEqual(apply_patch(root), 0)
 
     def test_source_drift_fails_before_any_write(self):
