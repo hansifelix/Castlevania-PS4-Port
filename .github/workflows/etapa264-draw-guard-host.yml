@@ -1,4 +1,4 @@
-name: Etapas 264-265 — draw guard e slots graphics fail-closed
+name: Etapas 264-266 — draw guard, slots graphics e integração fail-closed
 
 on:
   push:
@@ -7,12 +7,14 @@ on:
     paths:
       - "tests/test_unsupported_shader_stage_draw_guard.py"
       - "tests/test_unsupported_graphics_stage_binding.py"
+      - "tests/test_unsupported_shader_stage_integration.py"
       - "tools/link/patch_unsupported_shader_stage_failclosed.py"
       - ".github/workflows/etapa264-draw-guard-host.yml"
   pull_request:
     paths:
       - "tests/test_unsupported_shader_stage_draw_guard.py"
       - "tests/test_unsupported_graphics_stage_binding.py"
+      - "tests/test_unsupported_shader_stage_integration.py"
       - "tools/link/patch_unsupported_shader_stage_failclosed.py"
       - ".github/workflows/etapa264-draw-guard-host.yml"
   workflow_dispatch:
@@ -31,3 +33,4 @@ jobs:
           set -euo pipefail
           python3 tests/test_unsupported_shader_stage_draw_guard.py
           python3 tests/test_unsupported_graphics_stage_binding.py
+          python3 tests/test_unsupported_shader_stage_integration.py
