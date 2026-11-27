@@ -21,6 +21,13 @@ on:
       - "tests/test_public_runtime_symbol_hashes.py"
       - "tests/test_private_aot_provider_hash_join.py"
       - ".github/workflows/etapa98-runtime-provider-hashes.yml"
+      - "tools/link/patch_unsupported_shader_stage_failclosed.py"
+      - "tests/test_unsupported_shader_stage_patch.py"
+      - "tests/unsupported_shader_stage_reflection.cpp"
+      - "tests/test_unsupported_shader_stage_pipeline.py"
+      - "tests/geometry_valid_rejected.cpp"
+      - "tests/test_geometry_valid_spirv_failclosed.py"
+      - "docs/KAZUMA_ETAPA258_UNSUPPORTED_STAGE.md"
   workflow_dispatch:
 
 permissions:
@@ -38,12 +45,18 @@ jobs:
           set -euo pipefail
           python3 -m unittest discover -v -s tests -p 'test_public_runtime_symbol_hashes.py'
           python3 -m unittest discover -v -s tests -p 'test_private_aot_provider_hash_join.py'
+          python3 -m unittest discover -v -s tests -p 'test_unsupported_shader_stage_patch.py'
 
       - name: Instalar LLVM 18 e ferramentas de checkout
         run: |
           set -euo pipefail
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18 git curl ca-certificates
+          sudo apt-get install -y --no-install-recommends clang-18 lld-18 llvm-18 git curl ca-certificates spirv-tools
+
+      - name: Exercitar stage_bit fail-closed com o código exato do patch
+        run: |
+          set -euo pipefail
+          python3 tests/test_unsupported_shader_stage_pipeline.py
 
       - name: Baixar OpenOrbis v0.5.4 e validar SHA-256 fixado
         env:
@@ -112,6 +125,14 @@ jobs:
                            .replace("std::rotr(","kazuma_cpu_compat::rotr("))
           (Path(os.environ["RUNNER_TEMP"])/"compat/nx/cpu.h").write_text(patched)
           PY
+
+      - name: Aplicar barreira fail-closed e testar reflection SPIR-V no host
+        run: |
+          set -euo pipefail
+          python3 tools/link/patch_unsupported_shader_stage_failclosed.py "$KAZUMA_NX_SOURCE"
+          clang++-18 -std=c++20 -DNX_SHADERS_STANDALONE -I"$KAZUMA_NX_SOURCE/runtime/src/nvn" "$KAZUMA_NX_SOURCE/runtime/src/nvn/nvn_spirv_reflect.cpp" tests/unsupported_shader_stage_reflection.cpp -o "$RUNNER_TEMP/unsupported-stage-reflection-test"
+          "$RUNNER_TEMP/unsupported-stage-reflection-test"
+          python3 tests/test_geometry_valid_spirv_failclosed.py "$KAZUMA_NX_SOURCE"
 
       - name: Compilar 87 fontes runtime, metadados e 14 adaptadores PS4
         run: |
